@@ -87,7 +87,7 @@ describe("getPublishedPosts", () => {
       "http://api.test/api/v1/public/posts/",
       expect.objectContaining({
         headers: { Accept: "application/json" },
-        cache: "force-cache",
+        next: { revalidate: 3600, tags: ["posts"] },
         signal: expect.any(AbortSignal),
       }),
     );
@@ -167,6 +167,15 @@ describe("getPublishedPostBySlug", () => {
     const post = await getPublishedPostBySlug("bienvenida");
 
     expect(post).toEqual(MOCK_POST);
+    // Verifica que se usa la opción next con revalidate y tags (ISR)
+    expect(fetch).toHaveBeenCalledWith(
+      "http://api.test/api/v1/public/posts/bienvenida/",
+      expect.objectContaining({
+        headers: { Accept: "application/json" },
+        next: { revalidate: 3600, tags: ["posts"] },
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it("lanza ApiError con status 404 si el post no existe o es borrador", async () => {

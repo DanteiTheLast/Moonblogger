@@ -11,22 +11,24 @@ function getSiteUrl(): string {
 }
 
 /**
- * Sitemap estático generado en build (`out/sitemap.xml`).
+ * Sitemap con ISR: se revalida cada hora (revalidate: 3600) y bajo demanda
+ * vía revalidateTag('posts') cuando se publica/actualiza un post.
  *
- * Con `output: 'export'`, Next pre-renderiza esta metadata route durante el
- * build y escribe el archivo `sitemap.xml` en la salida estática. La lista de
- * publicaciones se obtiene de la API pública en build, igual que las páginas.
- *
- * NOTA: se fuerza `dynamic = 'force-static'` para que Next la trate como
- * metadata route estática (sin route handler dinámico) y sea compatible con
- * `output: 'export'`.
+ * Si la API no está disponible en build, devuelve solo la URL base para no
+ * bloquear el deploy; las entradas de posts se añadirán on-demand.
  */
-export const dynamic = "force-static";
+export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = getSiteUrl();
 
-  const posts = await getPublishedPosts();
+  let posts: Awaited<ReturnType<typeof getPublishedPosts>> = [];
+  try {
+    posts = await getPublishedPosts();
+  } catch {
+    // Si la API no responde en build, no bloqueamos el deploy.
+    // El sitemap se regenerará on-demand con revalidateTag.
+  }
 
   const postEntries: MetadataRoute.Sitemap = posts.map((post) => ({
     url: `${baseUrl}/posts/${post.slug}`,

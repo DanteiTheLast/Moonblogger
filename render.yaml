@@ -22,6 +22,11 @@ services:
         value: "5432"
       - key: DB_SSLMODE
         value: require
+      # Webhook de revalidación ISR (Vercel): se definen en dashboard (secretos).
+      - key: WEB_REVALIDATE_URL
+        sync: false
+      - key: WEB_REVALIDATE_SECRET
+        sync: false
       # Credenciales de Supabase (repo público): no se versionan; se definen
       # una vez en el dashboard (Service -> Environment). sync:false evita que
       # el blueprint las genere o las borre en syncs posteriores.

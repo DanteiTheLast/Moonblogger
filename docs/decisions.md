@@ -20,15 +20,23 @@ qué alternativas se consideraron.
   conservan validez residual hasta su expiración natural (≤ 7 días) y quedan
   blacklisted en su primer uso de refresh.
 
-## D2 — Stack web: Next.js + TypeScript con SSG
+## D2 — Stack web: Next.js + TypeScript con ISR + webhook (12/08/2026)
 
-- **Decisión (11/08/2026):** Next.js + TypeScript con pre-renderizado estático
-  (SSG). Aprobado por el usuario.
-- **Por qué:** contenido público de solo lectura, ideal para pre-renderizar en
-  build; mantiene el stack definido para el agente frontend; despliegue
-  estático simple.
-- **Alternativas:** estático servido por Django (un solo servicio/despliegue,
-  pero fija la web al backend) y Astro (muy adecuado pero framework distinto).
+- **Decisión (12/08/2026):** Next.js + TypeScript con **ISR (Incremental Static Regeneration)** y revalidación bajo demanda por webhook desde el backend. Aprobado por el usuario.
+- **Por qué:** SSG puro requería rebuild completo en Vercel (Deploy Hook) tras cada publicación; ISR + `revalidateTag` permite invalidación selectiva y inmediata de la caché solo cuando cambia el conjunto público (publicar/despublicar), sin rebuilds ni esperas. El webhook es fire-and-forget, no bloquea el CRUD, y usa tag-based revalidation para no sobrecargar la API en cold start.
+- **Alternativas consideradas:**
+  - SSG + Deploy Hook (D2 original): rebuild completo, latencia de minutos, consumo de builds de Vercel.
+  - SSR completo: consumo innecesario de funciones serverless en plan free; cold start de Render en cada request.
+  - Polling / SWR en cliente: no resuelve SEO/sitemap y añade complejidad cliente.
+- **Detalles de implementación:**
+  - `next.config.ts`: sin `output: 'export'` (ISR requiere funciones serverless).
+  - Fetch con `next: { revalidate: 3600, tags: ['posts'] }` en `lib/api.ts`.
+  - Páginas: `export const revalidate = 3600` en `/`, `/posts/[slug]`, `sitemap.ts`.
+  - `generateStaticParams` con try/catch → `[]` si la API falla en build (no bloquea deploy).
+  - Endpoint `POST /api/revalidate`: valida `X-Revalidate-Secret` (SHA-256) → `revalidateTag('posts', { expire: 0 })`.
+  - Backend: signals `post_save`/`post_delete` con filtro de transición (solo to/from `published`), `transaction.on_commit` + thread daemon + timeout 3s + guard env vars.
+- **Fallback:** revalidate time-based 1 h (`revalidate: 3600`) cubre cualquier fallo del webhook (proceso muerto, red, etc.).
+- **Nota (12/08/2026):** Esta decisión **supera a D2 original (SSG)**. El rebuild vía Deploy Hook ya no es necesario para actualizar contenido; queda solo para cambios de código.
 
 ## D3 — Estado de publicación: `status`
 
@@ -150,3 +158,18 @@ qué alternativas se consideraron.
   toca la BD), timeouts ampliados en Android (connect 30 s / read 90 s) y web
   (timeout 90 s + retry) para absorber el cold start. Región se elige al crear
   el blueprint (recomendada: cercana a Supabase `ca-central-1`).
+
+## D13 — Media: Supabase Storage (preparación, 12/08/2026)
+
+- **Decisión:** los archivos de media (imágenes, video futuro) se guardarán en **Supabase Storage**, nunca en el filesystem efímero de Render. Metadatos en PostgreSQL. La API emite **signed URLs** (delegación); no hace proxy de bytes (un proxy bloquearía el único worker de gunicorn en subidas grandes de video).
+- **Por qué:** Render Free tiene filesystem efímero (se pierde en cada deploy/spin-up) y un solo worker; hacer proxy de archivos grandes agotaría el worker y excedería memoria/tiempo. Supabase Storage es nativo, gratis en plan free (1 GB), y signed URLs delegan la transferencia al cliente directamente contra el storage.
+- **Límites free documentados:**
+  - Cuota total: **1 GB** (proyecto Supabase).
+  - Tamaño máximo por archivo: **50 MB** (video grande imposible en free).
+  - Egress: **5 GB/mes** (plan Supabase Free) + 5 GB/mes (plan Vercel Hobby) = 10 GB/mes combinado aprox.
+- **Implementación (preparación v1):**
+  - Comentario en `settings.py` junto a `STORAGES["default"]` aclarando que media usará Supabase Storage cuando existan FileFields.
+  - No se definen `MEDIA_ROOT`/`MEDIA_URL` todavía (configuración muerta sin FileFields).
+  - Cuando se añadan FileFields: `django-storages` + `storages.backends.s3boto3.S3Boto3Storage` apuntando a S3-compatible de Supabase, o cliente `supabase-py` para signed URLs.
+- **Alternativas:** filesystem local (no persiste en Render), Cloudflare R2 (requiere cuenta separada, añade complejidad), proxy en API (bloquea worker).
+- **Tradeoffs:** 50 MB/archivo y 1 GB total limitan a imágenes y video muy corto; video serio requerirá plan pago o R2.

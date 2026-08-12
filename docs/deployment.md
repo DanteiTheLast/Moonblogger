@@ -10,7 +10,7 @@ Vercel Hobby) en el momento de escribir este documento (11/08/2026).
 |---|---|---|---|
 | API | Render Free | Django + DRF (gunicorn + WhiteNoise), imagen desde `backend/Dockerfile`, Blueprint `render.yaml` | $0 |
 | Base de datos | Supabase Free | PostgreSQL gestionado (session pooler) | $0 |
-| Web | Vercel Hobby | Next.js SSG (`output: 'export'`, carpeta `out/`) | $0 |
+| Web | Vercel Hobby | Next.js **ISR** (`revalidate: 3600`, `tags: ['posts']`), invalidación por webhook | $0 |
 | Android | Dispositivo de Moon | APK release firmado, instalado directamente | $0 |
 
 ## Antes de empezar (prerrequisitos)
@@ -111,7 +111,7 @@ El blueprint define las no-secretas y auto-genera la secret key:
 
 ---
 
-## 3. Web: Vercel Hobby
+## 3. Web: Vercel Hobby (ISR)
 
 1. En Vercel → **Add New → Project** → importar el repositorio de MoonBlogger.
 2. **Root Directory**: `web` (el monorepo también contiene `backend/` y
@@ -121,25 +121,40 @@ El blueprint define las no-secretas y auto-genera la secret key:
      final).
    - `SITE_URL` → la URL pública de la web, p. ej.
      `https://<proyecto>.vercel.app` (sin barra final).
-4. **Build Command**: el por defecto de Next (equivale a `npm run build`, que
-   ya limpia la caché de fetch para obtener contenido fresco de la API).
+   - `REVALIDATE_SECRET` → **string aleatorio seguro** (mismo valor que
+     `WEB_REVALIDATE_SECRET` en Render). Se usa para firmar/validar el webhook
+     de revalidación (`X-Revalidate-Secret` = SHA-256 de este secreto).
+4. **Build Command**: el por defecto de Next (`npm run build`).
 5. Deploy. La web queda en `https://<proyecto>.vercel.app`.
 
-### Rebuild al publicar (Vercel Deploy Hook)
+### Revalidación de contenido (ISR + webhook)
 
-Como la web es estática, al publicar/editar contenido hay que reconstruir:
+Con ISR, **ya no es necesario un rebuild completo** (ni Deploy Hook) para que
+el contenido nuevo aparezca en la web:
 
-1. En Vercel → **Project (web) → Settings → Git → Deploy Hooks → Create Hook**
-   (branch principal). Copiar la URL generada.
-2. Guardar esa URL como variable de entorno `VERCEL_DEPLOY_HOOK`.
-3. Tras cada publicación en la API, disparar el rebuild:
+- **Fallback time-based**: cada página se revalida como máximo cada 1 hora
+  (`revalidate: 3600`).
+- **Invalidación inmediata**: al publicar/despublicar desde Android, el backend
+  dispara un webhook fire-and-forget a `POST https://<web>.vercel.app/api/revalidate`
+  con header `X-Revalidate-Secret` (SHA-256 de `REVALIDATE_SECRET`). La web
+  invalida el tag `posts` (`revalidateTag('posts', { expire: 0 })`) y las
+  siguientes peticiones sirven contenido fresco.
 
-   ```bash
-   VERCEL_DEPLOY_HOOK=https://api.vercel.com/v1/integrations/deploy/<id>/<token> \
-     ./scripts/deploy-web.sh
-   ```
+> El script `scripts/deploy-web.sh` y el Deploy Hook de Vercel **ya no se usan
+> para actualizar contenido**. Solo sirven para desplegar cambios de código
+> (push a `main` ya hace lo mismo).
 
-   (o hacer push a GitHub, que Vercel detecta y reconstruye).
+### Variables de entorno en Render (para el webhook)
+
+En el servicio `moonblogger-api` (Render → Environment), añadir:
+
+| Variable | Valor |
+|---|---|
+| `WEB_REVALIDATE_URL` | `https://<proyecto>.vercel.app/api/revalidate` |
+| `WEB_REVALIDATE_SECRET` | **Mismo string aleatorio que `REVALIDATE_SECRET` en Vercel** |
+
+El backend solo dispara el webhook si ambas están definidas (guard para
+dev/tests).
 
 ---
 
@@ -198,6 +213,25 @@ BACKUP_DIR=<destino> \
 - Retención: `BACKUP_RETENTION_DAYS` (default 30).
 - El destino final del dump (copia manual, otro proveedor, etc.) lo decide el
   usuario. Se recomienda una frecuencia razonable (p. ej. semanal).
+
+---
+
+## 6. Media: Supabase Storage (límites free)
+
+Cuando se implemente media (FileFields en modelos), los archivos vivirán en
+**Supabase Storage**, no en el filesystem de Render (efímero). La API emitirá
+signed URLs (delegación); no hará proxy de bytes.
+
+Límites del plan **Supabase Free** (agosto 2026):
+
+| Límite | Valor | Nota |
+|---|---|---|
+| Cuota total proyecto | **1 GB** | Imágenes + video |
+| Tamaño máx. por archivo | **50 MB** | Video grande imposible en free |
+| Egress/mes | **5 GB** | Suma con Vercel (~10 GB/mes combinado) |
+
+> **Video en free:** 50 MB/archivo + 1 GB total = solo clips muy cortos. Video
+> serio requerirá plan pago o migración a Cloudflare R2 / S3.
 
 ---
 

@@ -8,8 +8,16 @@ export const metadata: Metadata = {
   description: "El blog público de Moon: sus publicaciones, en orden.",
 };
 
+export const revalidate = 3600;
+
 export default async function HomePage() {
-  const posts = await getPublishedPosts();
+  let posts: Awaited<ReturnType<typeof getPublishedPosts>> = [];
+  try {
+    posts = await getPublishedPosts();
+  } catch {
+    // Si la API no responde en build, no bloqueamos el deploy.
+    // La página se regenerará on-demand con revalidateTag.
+  }
 
   return (
     <>

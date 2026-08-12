@@ -3,11 +3,11 @@ import type { Post, PostListResponse } from "./types";
 /**
  * Cliente de solo lectura de la API pública de Django.
  *
- * - Solo se usa desde server components durante el build (SSG): no hay
+ * - Se usa desde server components durante el build (ISR): no hay
  *   fetching en cliente en v1.
  * - `API_BASE_URL` se lee de la variable de entorno en tiempo de build.
- * - Las respuestas se cachean con `force-cache` para que Next pueda
- *   pre-renderizar estáticamente (sin ISR en v1).
+ * - Las respuestas usan `next: { revalidate: 3600, tags: ['posts'] }`
+ *   para habilitar ISR con revalidación por tag y tiempo.
  *
  * Resiliencia en build: la API en Render Free se duerme a los 15 min sin
  * tráfico y tarda 30-60 s en arrancar (cold start). Por eso cada request
@@ -56,7 +56,7 @@ async function fetchOnce<T>(path: string): Promise<T> {
   try {
     response = await fetch(`${getApiBaseUrl()}${path}`, {
       headers: { Accept: "application/json" },
-      cache: "force-cache",
+      next: { revalidate: 3600, tags: ["posts"] },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {

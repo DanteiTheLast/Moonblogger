@@ -18,10 +18,15 @@ Android (APK firmado, instalado en el dispositivo de Moon)
 Render Free ──► Django REST API (gunicorn + WhiteNoise, Dockerfile)
    │                        │
    │                        │ ORM (psycopg3, sslmode=require)
-   ▼                        ▼
-Vercel Hobby ◄── out/    Supabase Free ──► PostgreSQL (session pooler)
- (SSG estático,
-  rebuild vía Deploy Hook)
+   │                        │
+   │ webhook (on_commit)    ▼
+   │──────────────────────► Supabase Free ──► PostgreSQL (session pooler)
+   │           POST /api/revalidate
+   ▼
+Vercel Hobby (ISR + revalidateTag)
+   - revalidate: 3600s (fallback time-based)
+   - tags: ['posts'] (invalidación selectiva)
+   - SITE_URL para sitemap/robots
 ```
 
 - API: **Render Free**, contenedor desde `backend/Dockerfile` (Blueprint
@@ -29,9 +34,9 @@ Vercel Hobby ◄── out/    Supabase Free ──► PostgreSQL (session poole
   tráfico (cold start ~30-60 s), límite 750 h/mes.
 - BD: **Supabase Free** (session pooler `aws-<region>.pooler.supabase.com:5432`),
   `sslmode=require`; sin backups automáticos → `scripts/backup.sh`.
-- Web: **Vercel Hobby**, `output: 'export'` (100% estático), `SITE_URL` para
-  sitemap/robots, rebuild al publicar con `scripts/deploy-web.sh` (Deploy Hook).
+- Web: **Vercel Hobby**, **ISR (Incremental Static Regeneration)** con `revalidate = 3600` y `tags: ['posts']`. Invalidación bajo demanda vía webhook `POST /api/revalidate` (firmado con `REVALIDATE_SECRET`). El rebuild vía Deploy Hook ya no es necesario para actualizar contenido; solo para cambios de código.
 - Android: APK release firmado de instalación directa; keystore local.
+- Media (futuro): **Supabase Storage** con signed URLs (no proxy en API). Ver D13.
 - Detalles operativos: [docs/deployment.md](deployment.md).
 
 ## Reglas generales
@@ -57,6 +62,9 @@ Vercel Hobby ◄── out/    Supabase Free ──► PostgreSQL (session poole
 - **Dos namespaces de posts separados**: privado (autenticado, usado por
   Android) y público (`/public/posts/`, solo lectura, usado por la web). Esto
   evita filtrar borradores por un error de filtrado.
+- **Webhook de revalidación (interno)**: `POST /api/revalidate` en la web
+  (Vercel), llamado por el backend tras transiciones `published` ↔ `draft`.
+  Header `X-Revalidate-Secret` (SHA-256). No expuesto a clientes externos.
 - El contrato se fija en [api.md](api.md) y cualquier cambio posterior se
   coordina con los clientes afectados.
 

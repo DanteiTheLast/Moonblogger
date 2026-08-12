@@ -143,6 +143,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
+        # Media (futuro): usará Supabase Storage (S3-compatible) con signed URLs.
+        # No definir MEDIA_ROOT/MEDIA_URL hasta que existan FileFields reales.
+        # Ver decisión D13 en docs/decisions.md.
     },
     "staticfiles": {
         # Compresión + manifest con hashes para servirlos vía WhiteNoise.

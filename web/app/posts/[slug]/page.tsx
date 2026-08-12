@@ -10,16 +10,23 @@ interface PostPageProps {
 }
 
 /**
- * SSG estricto: solo se sirven los slugs generados en build.
- * Cualquier otro slug (borrador, inexistente) responde 404 sin
- * consultar la API en tiempo de request.
+ * ISR: se pre-renderizan los slugs en build y se revalida bajo demanda
+ * (revalidateTag) o por tiempo (revalidate: 3600).
+ * Si la API falla en build, generateStaticParams devuelve [] para no
+ * bloquear el deploy; las páginas se generarán on-demand.
  */
-export const dynamicParams = false;
+export const revalidate = 3600;
 
-/** Pre-renderiza cada publicación publicada (SSG). */
+/** Pre-renderiza cada publicación publicada (ISR). */
 export async function generateStaticParams() {
-  const posts = await getPublishedPosts();
-  return posts.map((post) => ({ slug: post.slug }));
+  try {
+    const posts = await getPublishedPosts();
+    return posts.map((post) => ({ slug: post.slug }));
+  } catch {
+    // Si la API no responde (cold start, caída temporal), no bloqueamos el build.
+    // Las páginas se generarán on-demand al primer request.
+    return [];
+  }
 }
 
 export async function generateMetadata({
