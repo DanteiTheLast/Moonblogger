@@ -4,6 +4,9 @@
 *.env.local
 local.properties
 
+# Backups de BD (scripts/backup.sh)
+backups/
+
 # Python / Django
 __pycache__/
 *.py[cod]
@@ -30,6 +33,7 @@ android/app/build/
 *.aab
 *.keystore
 *.jks
+keystore.properties
 captures/
 
 # IDE / OS

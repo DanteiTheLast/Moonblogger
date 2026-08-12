@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,6 +24,19 @@ DEBUG = env_bool("DJANGO_DEBUG", True)
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Producción: exigir secretos y hosts explícitos (fail-fast).
+if not DEBUG:
+    if not os.environ.get("DJANGO_SECRET_KEY"):
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY es obligatorio cuando DJANGO_DEBUG=false. "
+            "Defínela con un valor seguro en las variables de entorno."
+        )
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS es obligatorio cuando DJANGO_DEBUG=false. "
+            "Defínela con la lista de hosts permitidos (p. ej. el dominio de Koyeb)."
+        )
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -39,6 +53,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise sirve los estáticos en producción sin un servidor aparte.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -74,6 +90,10 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
         "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "5432"),
+        "OPTIONS": {
+            # Supabase requiere SSL ("require"); localmente se mantiene "disable".
+            "sslmode": os.environ.get("DB_SSLMODE", "disable"),
+        },
     }
 }
 
@@ -101,6 +121,19 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# Directorio donde collectstatic agrupa los estáticos (servidos por WhiteNoise).
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        # Compresión + manifest con hashes para servirlos vía WhiteNoise.
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -93,3 +93,34 @@ qué alternativas se consideraron.
 
 - Python 3.12/3.13, Django 5.x LTS, PostgreSQL 16, Kotlin/AGP estables.
   Las versiones exactas se verifican al momento de crear cada componente.
+
+## D11 — Despliegue de producción (Etapa 5, pre-producción)
+
+- **Decisión (11/08/2026):** despliegue en plataformas en sus planes gratuitos,
+  aprobado por el usuario:
+  - **API (Django + DRF)** → **Koyeb Free** (Dockerfile, gunicorn + WhiteNoise,
+    subdominio `{{KOYEB_PUBLIC_DOMAIN}}`, SSL incluido). Escala a 0 tras 1h sin
+    tráfico (cold start ~30 s en el siguiente request).
+  - **PostgreSQL** → **Supabase Free** (session pooler: `aws-<region>.pooler
+    .supabase.com:5432`, usuario `postgres.<project-ref>`, `sslmode=require`).
+    El proyecto se pausa tras 7 días sin actividad y se reanuda con la siguiente
+    petición. Sin backups automáticos en el plan free → `scripts/backup.sh`.
+  - **Web (Next.js)** → **Vercel Hobby**: SSG puro con `output: 'export'`
+    (carpeta `out/`), sitemap/robots estáticos y **rebuild al publicar** vía
+    Vercel Deploy Hook (`scripts/deploy-web.sh`).
+  - **Android** → APK release firmado, instalación directa en el dispositivo de
+    Moon (sin Play Store). Keystore local generado y custodiado por el usuario
+    (`scripts/create-keystore.sh`, `android/keystore.properties` gitignored).
+- **Por qué:** coste $0, SSL y dominio de subnivel incluidos, cobertura de las
+  tres capas con herramientas mantenidas.
+- **Alternativas consideradas:** VPS propio (control total pero mantenimiento y
+  coste), Railway/Render (similares a Koyeb), base de datos gestionada de Koyeb
+  (incluida en free pero con la misma política de pausa). Supabase se eligió por
+  su plan free conocido y su CLI de backups.
+- **Tradeoffs aceptados (documentados en `docs/deployment.md`):** cold start de
+  Koyeb, pausa de Supabase a la semana (mitigación: ping periódico), y que el
+  contenido web se actualiza con cada rebuild (no en tiempo real).
+- **Dominio propio:** diferido; se usan los subdominios gratuitos. Todo está
+  parametrizado por env (`DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+  `API_BASE_URL`, `SITE_URL`, `moonblogger.apiBaseUrlRelease`) para incorporar
+  un dominio propio más adelante sin cambios de código.

@@ -56,3 +56,53 @@ Creadas por las migraciones de `rest_framework_simplejwt.token_blacklist`
 - Credenciales por variables de entorno (`.env` local, `.env.example`
   versionado). Parámetros Django: `DB_NAME`, `DB_USER`, `DB_PASSWORD`,
   `DB_HOST`, `DB_PORT`.
+
+## Backups
+
+Copia de seguridad lógica con `scripts/backup.sh` (usa `pg_dump -Fc`,
+sin dependencias extra). Genera un volcado comprimido con nombre
+`moonblogger_YYYYMMDD_HHMMSS.dump` y aplica retención por días.
+
+- **Local (docker-compose):** con la BD levantada y las credenciales de
+  `docker-compose.yml` (`.env`):
+
+  ```bash
+  DB_PASSWORD=<password> ./scripts/backup.sh
+  ```
+
+- **Producción (Supabase):** variables según el panel de Supabase
+  (Project Settings → Database):
+
+  ```bash
+  DB_HOST=<pooler-session-o-conexion-directa> \
+  DB_PORT=5432 \
+  DB_NAME=postgres \
+  DB_USER=postgres.<project-ref> \
+  DB_PASSWORD=<password> \
+  DB_SSLMODE=require \
+  ./scripts/backup.sh
+  ```
+
+  `DB_SSLMODE=require` es el modo usado por el pooler *session* de
+  Supabase; la conexión directa (`db.<project-ref>.supabase.co`) también
+  requiere SSL.
+
+Variables del script (con defaults):
+
+| Variable | Default | Descripción |
+|---|---|---|
+| `DB_HOST` | `localhost` | Host de PostgreSQL. |
+| `DB_PORT` | `5432` | Puerto. |
+| `DB_NAME` | `moonblogger` | Nombre de la base. |
+| `DB_USER` | `moonblogger` | Rol de conexión. |
+| `DB_PASSWORD` | — (obligatoria) | Contraseña; se pasa a `pg_dump` vía `PGPASSWORD` sin imprimirse. |
+| `DB_SSLMODE` | (vacío) | `--sslmode` de `pg_dump`; `require` para Supabase. |
+| `BACKUP_DIR` | `./backups` (relativo al raíz del repo) | Directorio de salida. |
+| `BACKUP_RETENTION_DAYS` | `30` | Borra dumps más antiguos que N días. |
+
+**Importante:** el plan Free de Supabase **no incluye backups
+automáticos** y el proyecto se pausa tras 7 días sin actividad. El dump
+generado debe copiarse fuera de la infraestructura (offsite); el destino
+final (copia manual, almacenamiento propio, otro proveedor…) lo decide el
+usuario. El volcado está en formato custom de PostgreSQL y se restaura con
+`pg_restore`.

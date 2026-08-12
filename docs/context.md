@@ -42,3 +42,4 @@ sin reescribir).
 - [Decisiones técnicas](decisions.md)
 - [Contrato de API](api.md)
 - [Base de datos](database.md)
+- [Despliegue y operación](deployment.md)

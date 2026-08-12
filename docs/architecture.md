@@ -8,6 +8,31 @@ Android ──┐
 Web ──────┘
 ```
 
+## Topología de producción (Etapa 5)
+
+```
+Android (APK firmado, instalado en el dispositivo de Moon)
+   │
+   │ HTTPS
+   ▼
+Koyeb Free ──► Django REST API (gunicorn + WhiteNoise, Dockerfile)
+   │                        │
+   │                        │ ORM (psycopg3, sslmode=require)
+   ▼                        ▼
+Vercel Hobby ◄── out/    Supabase Free ──► PostgreSQL (session pooler)
+ (SSG estático,           (session pooler)
+  rebuild vía Deploy Hook)
+```
+
+- API: **Koyeb Free**, contenedor desde `backend/Dockerfile`, health check en
+  `/api/v1/health/`, escala a 0 tras 1h sin tráfico.
+- BD: **Supabase Free** (session pooler `aws-<region>.pooler.supabase.com:5432`),
+  `sslmode=require`; sin backups automáticos → `scripts/backup.sh`.
+- Web: **Vercel Hobby**, `output: 'export'` (100% estático), `SITE_URL` para
+  sitemap/robots, rebuild al publicar con `scripts/deploy-web.sh` (Deploy Hook).
+- Android: APK release firmado de instalación directa; keystore local.
+- Detalles operativos: [docs/deployment.md](deployment.md).
+
 ## Reglas generales
 
 - La **API REST es el único contrato** entre componentes. Ningún cliente accede

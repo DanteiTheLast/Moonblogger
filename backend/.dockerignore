@@ -1,0 +1,25 @@
+# Secretos y configuracion local (nunca al contenedor).
+.env
+.env.*
+!.env.example
+
+# Python / Django
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+db.sqlite3
+staticfiles/
+
+# Control de versiones
+.git/
+.gitignore
+.gitattributes
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

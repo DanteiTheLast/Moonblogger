@@ -29,7 +29,11 @@ Android → Django REST API (Retrofit/OkHttp) → PostgreSQL
 - `local.properties` (NO versionado) o `gradle.properties`:
   - `moonblogger.apiBaseUrlDebug` → por defecto `http://10.0.2.2:8000/`
     (emulador → host). Dispositivo físico: la IP del equipo.
-  - `moonblogger.apiBaseUrlRelease` → dominio real (placeholder).
+  - `moonblogger.apiBaseUrlRelease` → placeholder `https://api.moonblogger.example/`;
+    en el despliegue se define el subdominio real de Koyeb vía
+    `local.properties` o `gradle.properties`.
+- `keystore.properties` (NO versionado): credenciales de firma del release,
+  generado por `scripts/create-keystore.sh` (ver sección "Build de release").
 - `src/debug/res/xml/network_security_config.xml` permite cleartext en debug;
   release solo HTTPS.
 
@@ -43,6 +47,42 @@ Android → Django REST API (Retrofit/OkHttp) → PostgreSQL
 
 Los tests JVM no requieren Android: cubren JwtDecoder, parseo de errores DRF,
 refresh single-flight, flujo 401→refresh→reintento y CRUD del PostRepository.
+
+## Build de release (APK para instalación directa)
+
+La app se distribuye como APK release firmado e instalado directamente en el
+dispositivo de Moon (sin Play Store). Se necesita un keystore de firma propio.
+
+```bash
+# 1) Generar el keystore de firma (solo la primera vez; custódialo, ver nota)
+./scripts/create-keystore.sh
+
+# 2) Compilar el APK release firmado
+./gradlew assembleRelease
+
+# 3) El APK queda en:
+#    app/build/outputs/apk/release/app-release.apk
+
+# 4) Instalar en el dispositivo (depuración USB o adb por Wi-Fi)
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+`build.gradle.kts` lee las credenciales de `android/keystore.properties`
+(NO versionado). Si el archivo no existe, `assembleRelease` no rompe: produce
+un APK sin firmar (`app-release-unsigned.apk`) que Android rechazará al
+instalar; `assembleDebug`, tests y lint siguen funcionando sin él.
+
+### Custodia del keystore
+
+El keystore (por defecto `android/moonblogger-release.jks`) es la
+**identidad de firma** de la app:
+
+- Si se pierde, NO se puede instalar una actualización sobre la misma app:
+  Android exige que las actualizaciones se firmen con la misma clave.
+- La contraseña no se puede recuperar: no existe "reset".
+- Guarda una copia offline (disco externo / gestor de contraseñas) junto con
+  `storePassword` y `keyPassword`, y NUNCA lo versiones: `.gitignore` excluye
+  `keystore.properties` y `*.jks`.
 
 ## Deuda técnica aceptada (v1)
 

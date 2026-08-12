@@ -11,7 +11,10 @@ import java.util.Properties
 // - debug:  http://10.0.2.2:8000/  (emulador → host). Para un dispositivo
 //           físico, añade en `android/local.properties` (NO versionado):
 //              moonblogger.apiBaseUrlDebug=http://<IP-del-equipo>:8000/
-// - release: dominio real (placeholder; debe sustituirse antes de publicar).
+// - release: placeholder https://api.moonblogger.example/. La URL real será un
+//           subdominio de Koyeb que aún no existe; se pondrá en el despliegue
+//           en `android/local.properties` (o `gradle.properties`) con la clave
+//              moonblogger.apiBaseUrlRelease=https://<subdominio>.koyeb.app/
 //
 // También se puede sobreescribir desde gradle.properties con las mismas claves.
 // ---------------------------------------------------------------------------
@@ -30,6 +33,47 @@ val apiBaseUrlRelease: String =
     localProperty("moonblogger.apiBaseUrlRelease")
         ?: (findProperty("moonblogger.apiBaseUrlRelease") as String?)
         ?: "https://api.moonblogger.example/"
+
+// ---------------------------------------------------------------------------
+// Firma del build release (ver también scripts/create-keystore.sh).
+//
+// Se lee `android/keystore.properties` (NO versionado, generado por
+// scripts/create-keystore.sh). Contiene: storeFile, storePassword, keyAlias,
+// keyPassword. storeFile es una ruta RELATIVA a android/ (p. ej.
+// moonblogger-release.jks) para que funcione igual en local y en CI.
+//
+// Manejo de ausencia (intencionado): si keystore.properties no existe o está
+// incompleto, NO se asigna signingConfig al buildType release. Así
+// assembleDebug, lint y los tests siguen funcionando sin keystore; en cambio
+// assembleRelease produce un APK sin firmar (app-release-unsigned.apk) con un
+// warning en el log. Android rechazará instalar un APK sin firmar, que es el
+// fallo esperado y claro si no se ha generado el keystore antes.
+// ---------------------------------------------------------------------------
+fun keystoreProperties(): Properties? {
+    val file = rootProject.file("keystore.properties")
+    if (!file.exists()) return null
+    return Properties().apply { file.inputStream().use { load(it) } }
+}
+
+val keystoreProps = keystoreProperties()
+val releaseSigningKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val hasReleaseSigning =
+    keystoreProps != null && releaseSigningKeys.all { key ->
+        !keystoreProps.getProperty(key).isNullOrBlank()
+    }
+
+if (keystoreProps == null) {
+    logger.warn(
+        "MoonBlogger: no existe android/keystore.properties; el release NO quedará " +
+            "firmado. Ejecuta ./scripts/create-keystore.sh para generarlo.",
+    )
+} else if (!hasReleaseSigning) {
+    logger.warn(
+        "MoonBlogger: android/keystore.properties incompleto (faltan " +
+            releaseSigningKeys.filter { key -> keystoreProps.getProperty(key).isNullOrBlank() } +
+            "); el release NO quedará firmado.",
+    )
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -68,12 +112,39 @@ android {
         }
     }
 
+    // Configuración de firma: solo se activa si keystore.properties existe y
+    // está completo (ver sección superior). storeFile se interpreta relativo
+    // a android/ gracias a rootProject.file().
+    if (hasReleaseSigning) {
+        val props = keystoreProps!!
+        val keystoreFile = rootProject.file(props.getProperty("storeFile"))
+        if (!keystoreFile.exists()) {
+            logger.warn(
+                "MoonBlogger: el keystore '${props.getProperty("storeFile")}' indicado en " +
+                    "android/keystore.properties no existe; assembleRelease fallará en la firma.",
+            )
+        }
+        signingConfigs {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrlDebug\"")
         }
         release {
             isMinifyEnabled = false
+            // Sin keystore.properties no se asigna signingConfig: assembleRelease
+            // produce un APK sin firmar y no rompe assembleDebug/lint (ver arriba).
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrlRelease\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
