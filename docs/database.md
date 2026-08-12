@@ -87,6 +87,13 @@ sin dependencias extra). Genera un volcado comprimido con nombre
   Supabase; la conexión directa (`db.<project-ref>.supabase.co`) también
   requiere SSL.
 
+**Requisito de versión:** Supabase Free usa PostgreSQL 17; el cliente
+`pg_dump` debe ser de versión **igual o superior a la del servidor**
+(17+) o el volcado falla por "server version mismatch". Instala
+`postgresql-client` 17 o usa un contenedor `postgres:17`. El modo SSL se
+aplica vía la variable de entorno `PGSSLMODE` de libpq (el flag
+`--sslmode` de `pg_dump` no existe en todas las builds).
+
 Variables del script (con defaults):
 
 | Variable | Default | Descripción |
@@ -96,7 +103,7 @@ Variables del script (con defaults):
 | `DB_NAME` | `moonblogger` | Nombre de la base. |
 | `DB_USER` | `moonblogger` | Rol de conexión. |
 | `DB_PASSWORD` | — (obligatoria) | Contraseña; se pasa a `pg_dump` vía `PGPASSWORD` sin imprimirse. |
-| `DB_SSLMODE` | (vacío) | `--sslmode` de `pg_dump`; `require` para Supabase. |
+| `DB_SSLMODE` | (vacío) | Modo SSL vía `PGSSLMODE` de libpq; `require` para Supabase. |
 | `BACKUP_DIR` | `./backups` (relativo al raíz del repo) | Directorio de salida. |
 | `BACKUP_RETENTION_DAYS` | `30` | Borra dumps más antiguos que N días. |
 

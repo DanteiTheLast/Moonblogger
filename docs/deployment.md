@@ -175,7 +175,8 @@ BACKUP_DIR=<destino> \
 ./scripts/backup.sh
 ```
 
-- Requiere el cliente `pg_dump` (paquete `postgresql-client`) en la máquina.
+- Requiere el cliente `pg_dump` (paquete `postgresql-client`) en la máquina,
+  **versión 17 o superior** (Supabase Free usa PostgreSQL 17).
 - Formato custom PostgreSQL (`-Fc`); restauración con `pg_restore`.
 - Retención: `BACKUP_RETENTION_DAYS` (default 30).
 - El destino final del dump (copia manual, otro proveedor, etc.) lo decide el

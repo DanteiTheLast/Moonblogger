@@ -74,7 +74,10 @@ trap 'unset PGPASSWORD' EXIT
 STAMP="$(date +%Y%m%d_%H%M%S)"
 DUMP_FILE="$BACKUP_DIR/moonblogger_${STAMP}.dump"
 
-# Argumentos de pg_dump; --sslmode solo si se pide (Supabase: require).
+# Argumentos de pg_dump. El modo SSL se aplica vía la variable de entorno
+# PGSSLMODE de libpq (portable entre versiones; el flag --sslmode de pg_dump
+# no existe en todas las builds). Requiere pg_dump con versión >= la del
+# servidor (Supabase Free usa PostgreSQL 17; usa un cliente 17 o superior).
 PGDUMP_ARGS=(
   "--host=$DB_HOST"
   "--port=$DB_PORT"
@@ -83,7 +86,7 @@ PGDUMP_ARGS=(
   "--format=custom"
 )
 if [ -n "$DB_SSLMODE" ]; then
-  PGDUMP_ARGS+=("--sslmode=$DB_SSLMODE")
+  export PGSSLMODE="$DB_SSLMODE"
 fi
 
 echo "Conectando a PostgreSQL en $DB_HOST:$DB_PORT (base '$DB_NAME', usuario '$DB_USER')..."
