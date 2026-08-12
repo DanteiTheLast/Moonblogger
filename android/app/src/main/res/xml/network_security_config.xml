@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuración de red por defecto (release y main):
+  cleartext PROHIBIDO. Solo HTTPS.
+  La variante debug (src/debug/res/xml/network_security_config.xml) permite
+  cleartext para desarrollo contra el backend local.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

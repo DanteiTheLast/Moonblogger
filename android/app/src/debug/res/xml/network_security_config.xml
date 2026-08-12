@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Variante DEBUG únicamente: permite cleartext para hablar con el backend
+  local (http://10.0.2.2:8000/ en el emulador o la IP del equipo en un
+  dispositivo físico). En release se usa la config de src/main, que lo prohíbe.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,57 @@
+.item {
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  height: 100%;
+}
+
+/* Slot para miniatura de la publicación. Sin imagen, reserva un espacio
+   sutil para que el layout no se rompa cuando lleguen los sprites. */
+.thumbnailSlot {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title {
+  font-size: 1.4rem;
+}
+
+.title a {
+  color: var(--color-text);
+  display: inline-block;
+  min-height: 44px;
+  padding-block: var(--space-1);
+}
+
+.title a:hover {
+  color: var(--color-primary);
+}
+
+.date {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.excerpt {
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

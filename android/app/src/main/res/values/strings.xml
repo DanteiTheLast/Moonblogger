@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MoonBlogger</string>
+
+    <!-- Sesión -->
+    <string name="session_loading">Cargando…</string>
+    <string name="login_title">MoonBlogger</string>
+    <string name="login_subtitle">Inicia sesión para gestionar tus publicaciones</string>
+    <string name="login_username">Usuario</string>
+    <string name="login_password">Contraseña</string>
+    <string name="login_button">Entrar</string>
+    <string name="login_empty_fields">Introduce usuario y contraseña.</string>
+    <string name="login_invalid_credentials">Usuario o contraseña incorrectos.</string>
+    <string name="logout">Cerrar sesión</string>
+
+    <!-- Lista de posts -->
+    <string name="posts_title">Mis publicaciones</string>
+    <string name="posts_empty">Aún no hay publicaciones.\nCrea la primera con el botón +.</string>
+    <string name="posts_empty_cta">Crear publicación</string>
+    <string name="posts_error_title">No se pudieron cargar las publicaciones</string>
+    <string name="retry">Reintentar</string>
+    <string name="new_post">Nueva publicación</string>
+
+    <!-- Estados -->
+    <string name="status_draft">Borrador</string>
+    <string name="status_published">Publicada</string>
+
+    <!-- Detalle -->
+    <string name="detail_edit">Editar</string>
+    <string name="detail_delete">Eliminar</string>
+    <string name="detail_created">Creada</string>
+    <string name="detail_updated">Actualizada: %1$s</string>
+    <string name="detail_published">Publicada</string>
+    <string name="detail_load_error">No se pudo cargar la publicación.</string>
+    <string name="delete_confirm_title">Eliminar publicación</string>
+    <string name="delete_confirm_message">¿Seguro que quieres eliminar esta publicación? Esta acción no se puede deshacer.</string>
+    <string name="delete_confirm">Eliminar</string>
+    <string name="cancel">Cancelar</string>
+
+    <!-- Editor -->
+    <string name="editor_title_new">Nueva publicación</string>
+    <string name="editor_title_edit">Editar publicación</string>
+    <string name="editor_field_title">Título</string>
+    <string name="editor_field_content">Contenido</string>
+    <string name="editor_status_draft">Guardar como borrador</string>
+    <string name="editor_status_published">Publicar</string>
+    <string name="editor_save">Guardar</string>
+    <string name="editor_saving">Guardando…</string>
+    <string name="editor_empty_fields">El título y el contenido no pueden estar vacíos.</string>
+    <string name="editor_load_error">No se pudo cargar la publicación.</string>
+</resources>

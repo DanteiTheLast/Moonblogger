@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Icono adaptativo provisional: una luna creciente (placeholder del pixel art
+  futuro). Los sprites de LibreSprite se integrarán de forma aditiva.
+  minSdk 26 ⇒ basta con mipmap-anydpi-v26.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Creciente: círculo luna (centro 54,54 r=20) menos círculo de recorte
+         desplazado hacia arriba-derecha (centro 64,44 r=20), fillType evenOdd. -->
+    <path
+        android:fillColor="#3D2F35"
+        android:fillType="evenOdd"
+        android:pathData="M54,34 a20,20 0 1,0 0.001,0 z M64,24 a20,20 0 1,0 0.001,0 z" />
+</vector>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo del icono adaptativo (rosa pastel) -->
+    <color name="ic_launcher_background">#F5BCCF</color>
+    <!-- Fondo de ventana: crema pastel de la marca -->
+    <color name="window_background">#FDF6F1</color>
+</resources>

@@ -1,0 +1,41 @@
+# Secrets y configuración local
+.env
+.env.local
+*.env.local
+local.properties
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+db.sqlite3
+staticfiles/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# Android / Gradle
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+captures/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

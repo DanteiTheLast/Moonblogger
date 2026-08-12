@@ -1,0 +1,26 @@
+.skipLink {
+  position: absolute;
+  left: var(--space-4);
+  top: -100%;
+  z-index: 10;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  font-weight: 700;
+}
+
+.skipLink:focus-visible {
+  top: var(--space-3);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}

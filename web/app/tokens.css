@@ -1,0 +1,49 @@
+/*
+ * Tokens de diseño globales de MoonBlogger (estética "cute" pastel).
+ * Se importan desde globals.css.
+ *
+ * Colores: fondo crema, superficies blancas, acentos pastel rosa/lavanda.
+ * Texto siempre oscuro sobre pastel claro (contraste WCAG AA).
+ */
+
+:root {
+  /* Color */
+  --color-bg: #fdf6f1;
+  --color-surface: #ffffff;
+  --color-surface-alt: #faf0f6;
+  --color-pink: #f5bccf;
+  --color-lavender: #e3d7f4;
+  --color-text: #3d2f35;
+  --color-text-muted: #66525b;
+  --color-primary: #a74367;
+  --color-primary-hover: #8f3a59;
+  --color-border: #f1dfe8;
+  --color-focus: #7c5bbf;
+
+  /* Tipografía (variables inyectadas por next/font en <html>) */
+  --font-sans: var(--font-nunito), "Nunito", system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-baloo), "Baloo 2", var(--font-nunito), system-ui, sans-serif;
+
+  /* Espaciado */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Formas */
+  --radius-sm: 0.75rem;
+  --radius-md: 1.25rem;
+  --radius-lg: 2rem;
+  --radius-pill: 999px;
+
+  /* Sombras mínimas */
+  --shadow-sm: 0 1px 2px rgb(61 47 53 / 0.06);
+  --shadow-md: 0 4px 14px rgb(61 47 53 / 0.08);
+
+  /* Contenedor de lectura */
+  --container-max: 44rem;
+}

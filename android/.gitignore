@@ -1,0 +1,12 @@
+# MoonBlogger — Android (módulo)
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+output-metadata.json

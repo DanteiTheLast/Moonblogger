@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema base del framework. La UI real se construye con Compose (Material 3).
+         Se usa un tema del framework para evitar la dependencia AppCompat. -->
+    <style name="Theme.MoonBlogger" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>
