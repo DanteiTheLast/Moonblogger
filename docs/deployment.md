@@ -1,22 +1,22 @@
 # MoonBlogger — Despliegue y operación
 
 Guía de despliegue a producción en planes gratuitos y de operación diaria.
-Precios y límites son los de los planes free (Koyeb Free, Supabase Free,
+Precios y límites son los de los planes free (Render Free, Supabase Free,
 Vercel Hobby) en el momento de escribir este documento (11/08/2026).
 
 ## Arquitectura desplegada
 
 | Capa | Plataforma | Qué se ejecuta | Coste |
 |---|---|---|---|
-| API | Koyeb Free | Django + DRF (gunicorn + WhiteNoise), imagen desde `backend/Dockerfile` | $0 |
+| API | Render Free | Django + DRF (gunicorn + WhiteNoise), imagen desde `backend/Dockerfile`, Blueprint `render.yaml` | $0 |
 | Base de datos | Supabase Free | PostgreSQL gestionado (session pooler) | $0 |
 | Web | Vercel Hobby | Next.js SSG (`output: 'export'`, carpeta `out/`) | $0 |
 | Android | Dispositivo de Moon | APK release firmado, instalado directamente | $0 |
 
 ## Antes de empezar (prerrequisitos)
 
-- Cuentas creadas: **GitHub**, **Koyeb**, **Supabase**, **Vercel**.
-- Repositorio en GitHub con este proyecto (Koyeb y Vercel despliegan desde él).
+- Cuentas creadas: **GitHub**, **Render**, **Supabase**, **Vercel**.
+- Repositorio en GitHub con este proyecto (Render y Vercel despliegan desde él).
 - La API de MoonBlogger se conecta a PostgreSQL vía ORM. **Ningún cliente**
   (Android/Web) accede a la base de datos directamente.
 
@@ -56,41 +56,58 @@ distinta de la local.
 
 ---
 
-## 2. API: Koyeb Free
+## 2. API: Render Free
 
-### Crear el servicio
+### Crear el servicio (Blueprint)
 
-1. En Koyeb → **Create Service** → GitHub repository (repositorio de
-   MoonBlogger).
-2. **Builder**: Dockerfile.
-   - **Build context / working directory**: `backend` (el Dockerfile está en
-     `backend/Dockerfile`).
-3. **Health check**: rutar contra `/api/v1/health/` (no requiere auth).
-4. **Variables de entorno** (production):
+1. La configuración del servicio vive en **`render.yaml`** (raíz del repo):
+   web service `moonblogger-api`, `runtime: docker`, `rootDir: backend`, plan
+   `free`, `healthCheckPath: /api/v1/health/` y las variables de entorno
+   (no-secretas).
+2. En Render → **New + → Blueprint** → conectar GitHub → repositorio de
+   MoonBlogger, rama `main`. Elegir **región** (recomendada: la más cercana a
+   Supabase `ca-central-1`, p. ej. Ohio/Virginia si está disponible para Free).
+   Render parsea el blueprint y crea el servicio.
+3. URL pública resultante: `https://moonblogger-api.onrender.com`.
 
-   | Variable | Valor |
-   |---|---|
-   | `DJANGO_DEBUG` | `false` |
-   | `DJANGO_SECRET_KEY` | valor seguro, largo y aleatorio (no compartido) |
-   | `DJANGO_ALLOWED_HOSTS` | subdominio del servicio, p. ej. `<servicio>.<org>.koyeb.app` |
-   | `DB_HOST` | `aws-<region>.pooler.supabase.com` |
-   | `DB_PORT` | `5432` |
-   | `DB_NAME` | `postgres` (o el nombre que muestre Supabase) |
-   | `DB_USER` | `postgres.<project-ref>` |
-   | `DB_PASSWORD` | password de la BD de Supabase |
-   | `DB_SSLMODE` | `require` |
-   | `CORS_ALLOWED_ORIGINS` | orígenes: `https://<servicio>.<org>.koyeb.app` y `https://<proyecto>.vercel.app` |
+### Variables de entorno
 
-   `PORT` lo inyecta Koyeb; gunicorn escucha en `0.0.0.0:${PORT:-8000}`.
-   Con `DJANGO_DEBUG=false`, Koyeb exige `DJANGO_SECRET_KEY` y
-   `DJANGO_ALLOWED_HOSTS` (fail-fast: el arranque falla si faltan).
+El blueprint define las no-secretas y auto-genera la secret key:
 
-5. Tras el despliegue, el servicio queda en
-   `https://<servicio>.<org>.koyeb.app`. Verificar: `GET /api/v1/health/`
-   → `{"status": "ok"}` y `GET /admin/` (login) responden.
+| Variable | Origen | Valor |
+|---|---|---|
+| `DJANGO_DEBUG` | blueprint | `false` |
+| `DJANGO_SECRET_KEY` | blueprint | auto-generada por Render (`generateValue`), nunca en el repo |
+| `DJANGO_ALLOWED_HOSTS` | código | auto-resuelto en `settings.py` desde `RENDER_EXTERNAL_HOSTNAME`; usar solo para dominios adicionales (p. ej. un dominio propio futuro) |
+| `DB_HOST` | dashboard | `aws-<region>.pooler.supabase.com` |
+| `DB_USER` | dashboard | `postgres.<project-ref>` |
+| `DB_PASSWORD` | dashboard | password de la BD de Supabase |
+| `DB_NAME` | blueprint | `postgres` |
+| `DB_PORT` | blueprint | `5432` |
+| `DB_SSLMODE` | blueprint | `require` |
+| `CORS_ALLOWED_ORIGINS` | dashboard | opcional; orígenes adicionales de la web |
+
+- `DB_HOST`, `DB_USER` y `DB_PASSWORD` llevan `sync: false` en el blueprint: se
+  definen **una vez** en el dashboard (Service → **Environment**) y Render
+  redepliega solo. No se versionan (el repo es público).
+- `PORT` lo inyecta Render (10000 por defecto); gunicorn escucha en
+  `0.0.0.0:${PORT:-8000}` con `--workers ${WEB_CONCURRENCY:-1} --threads 2`
+  (1 worker es lo sano para el plan free: 512 MB / 0.1 CPU).
+- Con `DJANGO_DEBUG=false`, el arranque falla si falta `DJANGO_SECRET_KEY`
+  (fail-fast); `DJANGO_ALLOWED_HOSTS` se completa automáticamente con el
+  subdominio de Render.
+
+5. Tras el despliegue, verificar: `GET /api/v1/health/`
+   → `{"status": "ok"}` y `GET /api/v1/public/posts/` (toca la BD) responden.
+   `/admin/` debe cargar.
 
 > Los estáticos del admin los sirve WhiteNoise (`collectstatic` se ejecuta en
 > el build de la imagen); no hace falta servidor de estáticos aparte.
+>
+> **Migraciones:** se aplican manualmente desde una máquina local con el código
+> (misma convención que la creación inicial; ver [Sección 1](#1-base-de-datos-supabase-free)).
+> El `health/` no consulta la BD: un deploy puede quedar "healthy" con
+> credenciales de Supabase incorrectas → siempre verificar `public/posts/`.
 
 ---
 
@@ -100,7 +117,7 @@ distinta de la local.
 2. **Root Directory**: `web` (el monorepo también contiene `backend/` y
    `android/`).
 3. **Environment Variables**:
-   - `API_BASE_URL` → `https://<servicio>.<org>.koyeb.app/api/v1` (sin barra
+   - `API_BASE_URL` → `https://moonblogger-api.onrender.com/api/v1` (sin barra
      final).
    - `SITE_URL` → la URL pública de la web, p. ej.
      `https://<proyecto>.vercel.app` (sin barra final).
@@ -142,7 +159,7 @@ Como la web es estática, al publicar/editar contenido hay que reconstruir:
    (NO versionado):
 
    ```
-   moonblogger.apiBaseUrlRelease=https://<servicio>.<org>.koyeb.app/
+   moonblogger.apiBaseUrlRelease=https://moonblogger-api.onrender.com/
    ```
 
 3. Compilar:
@@ -188,19 +205,23 @@ BACKUP_DIR=<destino> \
 
 ### Publicar contenido
 
-1. Moon publica/edita desde la app Android (API en Koyeb, BD en Supabase).
+1. Moon publica/edita desde la app Android (API en Render, BD en Supabase).
 2. Si la web debe actualizarse: disparar `scripts/deploy-web.sh` (Deploy Hook)
    o hacer push a GitHub.
 
 ### Ping anti-pausa
 
-Koyeb escala a 0 tras 1 h sin tráfico (cold start ~30 s al siguiente request)
-y Supabase pausa el proyecto tras 7 días sin actividad (reanuda solo al recibir
-una petición). Para un blog personal es tolerable, pero si se quiere reducir el
-cold start y evitar la pausa, se puede configurar un servicio gratuito de
-monitoreo (p. ej. cron-job.org) que haga una petición periódica a
-`https://<servicio>.<org>.koyeb.app/api/v1/health/` cada pocos minutos. Ese
-ping mantiene despiertos tanto el contenedor de Koyeb como la BD de Supabase.
+Render duerme el servicio tras **15 min** sin tráfico (cold start ~30-60 s en
+el siguiente request) y Supabase pausa el proyecto tras 7 días sin actividad
+(reanuda solo al recibir una petición). Para un blog personal es tolerable,
+pero para reducir el cold start y evitar la pausa se puede configurar un
+servicio gratuito de monitoreo (p. ej. cron-job.org) que haga una petición
+periódica a `https://moonblogger-api.onrender.com/api/v1/public/posts/` cada
+**~10 minutos**. Este endpoint es público y consulta la BD, así que el ping
+mantiene despiertos tanto el contenedor de Render como Supabase (el
+`/api/v1/health/` no toca la BD y NO evita la pausa de Supabase). Con ese
+ritmo, el consumo de horas de instancia (~720-744 h/mes) queda bajo el límite
+de 750 h/mes del plan free.
 
 ### Verificación de salud
 
@@ -220,7 +241,8 @@ una máquina con el código (igual que en la creación inicial):
 - [ ] Repositorio en GitHub con el proyecto.
 - [ ] Proyecto Supabase creado; credenciales del pooler anotadas.
 - [ ] `migrate` y `create_moon_user` ejecutados contra la BD de producción.
-- [ ] Servicio en Koyeb desplegado y `/api/v1/health/` responde.
+- [ ] Servicio en Render desplegado y `/api/v1/health/` y `/api/v1/public/posts/`
+      responden.
 - [ ] Web en Vercel desplegada (root `web`, `API_BASE_URL` + `SITE_URL`).
 - [ ] Deploy Hook creado y probado con `scripts/deploy-web.sh`.
 - [ ] Keystore generado y custodiado; APK release firmado e instalado en el

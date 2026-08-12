@@ -24,6 +24,19 @@ DEBUG = env_bool("DJANGO_DEBUG", True)
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Render inyecta RENDER="true" y RENDER_EXTERNAL_HOSTNAME (hostname onrender.com).
+# Render no interpola variables de entorno, así que el host público se añade
+# aquí en código. DJANGO_ALLOWED_HOSTS sigue teniendo prioridad (p. ej. para
+# un dominio personalizado futuro).
+if env_bool("RENDER"):
+    render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+    if not render_host:
+        render_host = (
+            os.environ.get("RENDER_EXTERNAL_URL", "").split("://")[-1].split("/")[0].strip()
+        )
+    if render_host and render_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(render_host)
+
 # Producción: exigir secretos y hosts explícitos (fail-fast).
 if not DEBUG:
     if not os.environ.get("DJANGO_SECRET_KEY"):
@@ -34,7 +47,9 @@ if not DEBUG:
     if not ALLOWED_HOSTS:
         raise ImproperlyConfigured(
             "DJANGO_ALLOWED_HOSTS es obligatorio cuando DJANGO_DEBUG=false. "
-            "Defínela con la lista de hosts permitidos (p. ej. el dominio de Koyeb)."
+            "Defínela con la lista de hosts permitidos (en Render el host público "
+            "se añade automáticamente; aquí se añaden dominios adicionales, "
+            "p. ej. un dominio personalizado)."
         )
 
 INSTALLED_APPS = [

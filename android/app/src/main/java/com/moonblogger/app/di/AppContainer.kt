@@ -49,8 +49,8 @@ class AppContainer(context: Context) {
     val tokenStore: TokenStore = EncryptedTokenStore(appContext)
 
     private val baseOkHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .build()
 
     private val authRetrofit: Retrofit = Retrofit.Builder()
@@ -68,8 +68,8 @@ class AppContainer(context: Context) {
 
     // --- Fase 3: client autenticado y API de posts ---
     private val authedOkHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .addInterceptor(AuthInterceptor(tokenStore))
         .authenticator(TokenAuthenticator(authRefresher, sessionManager, tokenStore))
         .maybeAddLogging() // solo debug (ver NetworkLogging.kt)

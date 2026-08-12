@@ -29,9 +29,12 @@ Android → Django REST API (Retrofit/OkHttp) → PostgreSQL
 - `local.properties` (NO versionado) o `gradle.properties`:
   - `moonblogger.apiBaseUrlDebug` → por defecto `http://10.0.2.2:8000/`
     (emulador → host). Dispositivo físico: la IP del equipo.
-  - `moonblogger.apiBaseUrlRelease` → placeholder `https://api.moonblogger.example/`;
-    en el despliegue se define el subdominio real de Koyeb vía
-    `local.properties` o `gradle.properties`.
+  - `moonblogger.apiBaseUrlRelease` → URL real de la API en Render Free,
+    definida en `local.properties` (obligatorio con barra final, p. ej.
+    `https://<nombre>.onrender.com/`).
+    Nota: el servicio de Render Free se duerme tras ~15 min sin tráfico; el
+    primer request puede tardar 30-60 s (cold start). Los timeouts de OkHttp en
+    `AppContainer.kt` lo toleran (connect 30 s / read 90 s).
 - `keystore.properties` (NO versionado): credenciales de firma del release,
   generado por `scripts/create-keystore.sh` (ver sección "Build de release").
 - `src/debug/res/xml/network_security_config.xml` permite cleartext en debug;

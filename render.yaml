@@ -1,0 +1,33 @@
+# Blueprint de Render (https://render.com/docs/blueprint-spec).
+# Despliegue de la API en Render Free. Crear el servicio desde
+# "New +" -> "Blueprint" apuntando a este repositorio (rama main).
+# La región se elige al crear el blueprint (se recomienda una cercana a
+# Supabase ca-central-1). URL pública: https://moonblogger-api.onrender.com
+services:
+  - type: web
+    name: moonblogger-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /api/v1/health/
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "false"
+      # Render genera un secreto aleatorio y lo persiste (nunca va al repo).
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DB_NAME
+        value: postgres
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_SSLMODE
+        value: require
+      # Credenciales de Supabase (repo público): no se versionan; se definen
+      # una vez en el dashboard (Service -> Environment). sync:false evita que
+      # el blueprint las genere o las borre en syncs posteriores.
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false

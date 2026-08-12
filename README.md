@@ -66,7 +66,7 @@ Para un dispositivo físico, configura la IP del equipo en
 
 ## Despliegue (producción)
 
-Plan gratuito: API en Koyeb Free, PostgreSQL en Supabase Free, web estática en
+Plan gratuito: API en Render Free, PostgreSQL en Supabase Free, web estática en
 Vercel Hobby y APK release firmado para instalación directa. Guía completa:
 [`docs/deployment.md`](docs/deployment.md).
 

@@ -56,12 +56,18 @@ Pasos una sola vez:
 1. Conectar el repositorio en Vercel → **Add New → Project**.
 2. **Root Directory:** `web` (el monorepo también contiene `backend/` y `android/`).
 3. En **Environment Variables**:
-   - `API_BASE_URL` → URL real de la API desplegada en Koyeb (p. ej.
-     `https://<app>.koyeb.app/api/v1`, sin barra final).
+   - `API_BASE_URL` → URL real de la API desplegada en Render (p. ej.
+     `https://<app>.onrender.com/api/v1`, sin barra final).
    - `SITE_URL` → URL pública del sitio (p. ej. `https://<proyecto>.vercel.app`).
 4. **Build Command:** dejar el por defecto de Next (usa `npm run build`, que ya
    limpia la caché de fetch, por lo que cada build de Vercel obtiene contenido
    fresco de la API).
+
+> Nota sobre el cold start de Render Free: la API se duerme a los 15 min sin
+> tráfico y tarda 30-60 s en arrancar. El cliente web usa un timeout de ~90 s
+> y reintenta automáticamente, por lo que el build normalmente aguanta el
+> arranque. Si aun así un build fallara, basta con re-ejecutarlo con el
+> servicio ya caliente.
 
 Flujo de publicación:
 

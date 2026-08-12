@@ -27,11 +27,32 @@ function mockFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
   } as Response);
 }
 
+/**
+ * Con `vi.useFakeTimers()` activo, deja correr los backoff de reintento
+ * (5 s por espera) hasta que la promesa se resuelve o se rechaza.
+ */
+async function flushRetryTimers(promise: Promise<unknown>): Promise<void> {
+  let settled = false;
+  promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  for (let i = 0; i < 10 && !settled; i += 1) {
+    await vi.advanceTimersByTimeAsync(5_000);
+  }
+  expect(settled).toBe(true);
+}
+
 beforeEach(() => {
   process.env.API_BASE_URL = "http://api.test/api/v1";
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -64,7 +85,11 @@ describe("getPublishedPosts", () => {
     expect(posts).toEqual([MOCK_POST]);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api.test/api/v1/public/posts/",
-      expect.objectContaining({ headers: { Accept: "application/json" } }),
+      expect.objectContaining({
+        headers: { Accept: "application/json" },
+        cache: "force-cache",
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -80,20 +105,58 @@ describe("getPublishedPosts", () => {
     await expect(getPublishedPosts()).resolves.toEqual([]);
   });
 
-  it("lanza ApiError si la API responde con error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFetch(500, { detail: "Error interno" }),
-    );
+  it("lanza ApiError si la API responde con error 5xx (con reintentos)", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch(500, { detail: "Error interno" });
+    vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getPublishedPosts()).rejects.toBeInstanceOf(ApiError);
-    await expect(getPublishedPosts()).rejects.toMatchObject({ status: 500 });
+    const promise = getPublishedPosts();
+    await flushRetryTimers(promise);
+
+    await expect(promise).rejects.toBeInstanceOf(ApiError);
+    await expect(promise).rejects.toMatchObject({ status: 500 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("lanza ApiError (status 0) si no hay conexión", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+  it("lanza ApiError (status 0) si no hay conexión (con reintentos)", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getPublishedPosts()).rejects.toMatchObject({ status: 0 });
+    const promise = getPublishedPosts();
+    await flushRetryTimers(promise);
+
+    await expect(promise).rejects.toMatchObject({ status: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("reintenta tras un fallo de conexión transitorio y tiene éxito", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => MOCK_POST,
+      } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = getPublishedPostBySlug("bienvenida");
+    await flushRetryTimers(promise);
+
+    await expect(promise).resolves.toEqual(MOCK_POST);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("no reintenta los errores 4xx", async () => {
+    const fetchMock = mockFetch(404, { detail: "No encontrado." });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPublishedPostBySlug("borrador")).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

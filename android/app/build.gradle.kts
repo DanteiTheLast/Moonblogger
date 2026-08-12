@@ -12,9 +12,9 @@ import java.util.Properties
 //           físico, añade en `android/local.properties` (NO versionado):
 //              moonblogger.apiBaseUrlDebug=http://<IP-del-equipo>:8000/
 // - release: placeholder https://api.moonblogger.example/. La URL real será un
-//           subdominio de Koyeb que aún no existe; se pondrá en el despliegue
+//           subdominio de Render Free que aún no existe; se pondrá en el despliegue
 //           en `android/local.properties` (o `gradle.properties`) con la clave
-//              moonblogger.apiBaseUrlRelease=https://<subdominio>.koyeb.app/
+//              moonblogger.apiBaseUrlRelease=https://<nombre>.onrender.com/
 //
 // También se puede sobreescribir desde gradle.properties con las mismas claves.
 // ---------------------------------------------------------------------------

@@ -15,17 +15,18 @@ Android (APK firmado, instalado en el dispositivo de Moon)
    │
    │ HTTPS
    ▼
-Koyeb Free ──► Django REST API (gunicorn + WhiteNoise, Dockerfile)
+Render Free ──► Django REST API (gunicorn + WhiteNoise, Dockerfile)
    │                        │
    │                        │ ORM (psycopg3, sslmode=require)
    ▼                        ▼
 Vercel Hobby ◄── out/    Supabase Free ──► PostgreSQL (session pooler)
- (SSG estático,           (session pooler)
+ (SSG estático,
   rebuild vía Deploy Hook)
 ```
 
-- API: **Koyeb Free**, contenedor desde `backend/Dockerfile`, health check en
-  `/api/v1/health/`, escala a 0 tras 1h sin tráfico.
+- API: **Render Free**, contenedor desde `backend/Dockerfile` (Blueprint
+  `render.yaml`), health check en `/api/v1/health/`, spin-down tras 15 min sin
+  tráfico (cold start ~30-60 s), límite 750 h/mes.
 - BD: **Supabase Free** (session pooler `aws-<region>.pooler.supabase.com:5432`),
   `sslmode=require`; sin backups automáticos → `scripts/backup.sh`.
 - Web: **Vercel Hobby**, `output: 'export'` (100% estático), `SITE_URL` para

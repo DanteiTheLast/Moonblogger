@@ -124,3 +124,29 @@ qué alternativas se consideraron.
   parametrizado por env (`DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
   `API_BASE_URL`, `SITE_URL`, `moonblogger.apiBaseUrlRelease`) para incorporar
   un dominio propio más adelante sin cambios de código.
+- **Nota (11/08/2026):** en lo relativo a la API, esta decisión queda superada
+  por [D12](#d12--migración-de-la-api-a-render-free-11082026).
+
+## D12 — Migración de la API a Render Free (11/08/2026)
+
+- **Decisión:** la API (Django + DRF) pasa de **Koyeb Free** a **Render Free**
+  (web service Docker, `backend/Dockerfile`, gunicorn + WhiteNoise, subdominio
+  `https://<servicio>.onrender.com`, SSL incluido), definido como Blueprint
+  (`render.yaml` en la raíz). **Supera a D11 en lo relativo a la API**; el resto
+  del stack no cambia (Supabase Free, Vercel Hobby, APK firmado).
+- **Por qué:** Koyeb cerró su plan gratuito a nuevos usuarios. Render ofrece un
+  plan free sin tarjeta con despliegue por Dockerfile equivalente (sin cambios
+  en la imagen), SSL/subdominio incluidos y health checks configurados en el
+  blueprint. `DJANGO_ALLOWED_HOSTS` se resuelve en código desde
+  `RENDER_EXTERNAL_HOSTNAME` (Render no interpola variables de entorno).
+- **Alternativas:** Railway (sin plan free comparable), Fly.io (requiere
+  tarjeta), VPS propio (mantenimiento y coste, ya descartado en D11). Mantener
+  Koyeb no era viable (plan cerrado a nuevos usuarios).
+- **Tradeoffs:** spin-down tras **15 min** de inactividad (Koyeb: 1 h) con cold
+  start ~30-60 s; límite **750 h/mes** de instancia; filesystem efímero (sin
+  impacto: no hay media/uploads, los estáticos los sirve WhiteNoise desde la
+  imagen y la BD está en Supabase). Mitigaciones: ping anti-pausa cada ~10 min
+  a `/api/v1/public/posts/` (mantiene Render y Supabase activos; `/health/` no
+  toca la BD), timeouts ampliados en Android (connect 30 s / read 90 s) y web
+  (timeout 90 s + retry) para absorber el cold start. Región se elige al crear
+  el blueprint (recomendada: cercana a Supabase `ca-central-1`).
