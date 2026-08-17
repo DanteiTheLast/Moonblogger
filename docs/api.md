@@ -74,6 +74,7 @@ vídeo/póster sigue sin validación E2E desde Android.
 | PATCH | `/api/v1/posts/{id}/media/{media_id}/` | `{alt_text?, caption?}` | Metadata privada actualizada. |
 | DELETE | `/api/v1/posts/{id}/media/{media_id}/` | — | `204`; encola limpieza de objetos. |
 | PUT | `/api/v1/posts/{id}/media/layout/` | `{items:[{id,position,is_cover}], carousel_transition?}` | Layout atómico. |
+| GET | `/api/v1/posts/{id}/media/read-urls/` | — | `200 {expires_at, media:[{id,url,poster_url?}]}`; URLs privadas firmadas. |
 
 - Máximo 10 elementos por post y 2 vídeos. Imágenes: JPEG/PNG/WebP hasta 8 MiB;
   vídeo: MP4 hasta 40 MiB y duración declarada máxima de 120 s. Todo vídeo exige

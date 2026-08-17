@@ -9,6 +9,7 @@ import com.moonblogger.app.data.model.MediaLayoutRequest
 import com.moonblogger.app.data.model.MediaMetadataRequest
 import com.moonblogger.app.data.model.UploadIntentRequest
 import com.moonblogger.app.data.model.UploadIntentResponse
+import com.moonblogger.app.data.model.MediaReadUrlsResponse
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -31,6 +32,9 @@ interface PostsApi {
 
     @GET("api/v1/posts/{id}/")
     suspend fun getPost(@Path("id") id: Long): Post
+
+    @GET("api/v1/posts/{id}/media/read-urls/")
+    suspend fun getMediaReadUrls(@Path("id") id: Long): MediaReadUrlsResponse
 
     @POST("api/v1/posts/")
     suspend fun createPost(@Body body: PostRequest): Post

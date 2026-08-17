@@ -36,6 +36,10 @@
     <string name="delete_confirm_message">¿Seguro que quieres eliminar esta publicación? Esta acción no se puede deshacer.</string>
     <string name="delete_confirm">Eliminar</string>
     <string name="cancel">Cancelar</string>
+    <string name="media_previous">Imagen anterior</string>
+    <string name="media_next">Imagen siguiente</string>
+    <string name="media_empty">No hay multimedia disponible.</string>
+    <string name="media_error">No se pudo cargar la multimedia.</string>
 
     <!-- Editor -->
     <string name="editor_title_new">Nueva publicación</string>

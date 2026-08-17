@@ -3,6 +3,7 @@ package com.moonblogger.app.ui.screens.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moonblogger.app.data.model.Post
+import com.moonblogger.app.data.model.MediaReadUrl
 import com.moonblogger.app.data.remote.ApiErrors
 import com.moonblogger.app.data.repository.PostRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,8 @@ data class PostDetailUiState(
     val error: String? = null,
     val isDeleting: Boolean = false,
     val isDeleted: Boolean = false,
+    val mediaReadUrls: List<MediaReadUrl> = emptyList(),
+    val mediaError: String? = null,
 )
 
 class PostDetailViewModel(
@@ -37,6 +40,13 @@ class PostDetailViewModel(
             repository.getPost(postId)
                 .onSuccess { post ->
                     _uiState.update { it.copy(isLoading = false, post = post) }
+                    if (post.media.any { it.state == "ready" }) {
+                        repository.getMediaReadUrls(postId).onSuccess { response ->
+                            _uiState.update { it.copy(mediaReadUrls = response.media, mediaError = null) }
+                        }.onFailure { e ->
+                            _uiState.update { it.copy(mediaError = ApiErrors.userMessage(e)) }
+                        }
+                    }
                 }
                 .onFailure { e ->
                     _uiState.update {

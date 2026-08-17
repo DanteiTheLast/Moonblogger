@@ -7,6 +7,7 @@ from .views import (
     HealthCheckView,
     MediaDetailView,
     MediaLayoutView,
+    MediaReadURLsView,
     PostViewSet,
     PublicPostViewSet,
     UploadIntentView,
@@ -23,6 +24,7 @@ urlpatterns = [
     path("posts/<int:post_id>/media/upload-intents/", UploadIntentView.as_view(), name="media-upload-intents"),
     path("posts/<int:post_id>/media/complete/", CompleteMediaView.as_view(), name="media-complete"),
     path("posts/<int:post_id>/media/layout/", MediaLayoutView.as_view(), name="media-layout"),
+    path("posts/<int:post_id>/media/read-urls/", MediaReadURLsView.as_view(), name="media-read-urls"),
     path("posts/<int:post_id>/media/<uuid:media_id>/", MediaDetailView.as_view(), name="media-detail"),
     path("", include(router.urls)),
 ]

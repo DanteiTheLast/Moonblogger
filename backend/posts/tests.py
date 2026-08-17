@@ -451,6 +451,28 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertEqual(request.data, b"{}")
 
     @patch("posts.storage.urlopen")
+    def test_signed_read_posts_asset_uses_exact_request_and_normalizes_relative_url(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse(
+            json.dumps({"signedURL": "/storage/v1/object/sign/private/posts/a/asset?token=abc"}).encode()
+        )
+
+        result = self.storage.create_signed_read_url("posts/a/asset", 300)
+
+        self.assertEqual(
+            result,
+            "https://project.test/storage/v1/object/sign/private/posts/a/asset?token=abc",
+        )
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(
+            request.full_url,
+            "https://project.test/storage/v1/object/sign/private/posts/a/asset",
+        )
+        self.assertEqual(json.loads(request.data), {"expiresIn": 300})
+        self.assertNotIn("not-a-real-secret", request.full_url)
+        self.assertNotIn("not-a-real-secret", result)
+
+    @patch("posts.storage.urlopen")
     def test_object_info_uses_head_exact_object_path_and_asset_headers(self, urlopen_mock):
         response = FakeHTTPResponse(
             headers={"Content-Length": "123", "Content-Type": "image/jpeg"}
@@ -612,6 +634,62 @@ class MediaAPITests(APITestCase):
             {"kind": "image", "mime_type": "image/jpeg", "size_bytes": 20},
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_read_urls_returns_only_ready_positioned_media_in_position_order(self):
+        first = self.ready_media(position=1, private_object_key="first")
+        second = self.ready_media(position=0, private_object_key="second")
+        self.ready_media(state=PostMedia.State.PENDING, position=2, private_object_key="pending")
+        self.ready_media(position=None, private_object_key="unpositioned")
+        signed = {
+            "first": "https://signed.test/first",
+            "second": "https://signed.test/second",
+        }
+        with patch.object(self.storage, "create_signed_read_url", create=True, side_effect=lambda key, ttl: signed[key]) as signer:
+            with patch("posts.views.get_storage", return_value=self.storage):
+                response = self.client.get(f"/api/v1/posts/{self.post.id}/media/read-urls/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data["media"]], [second.id, first.id])
+        self.assertEqual([item["url"] for item in response.data["media"]], [signed["second"], signed["first"]])
+        self.assertIn("expires_at", response.data)
+        self.assertEqual(signer.call_count, 2)
+        self.assertNotIn("private_object_key", response.data)
+        self.assertNotIn("private_poster_key", response.data)
+
+    def test_read_urls_hides_other_and_missing_posts(self):
+        other_post = create_post(self.other, "Ajeno read")
+        for post_id in (other_post.id, 999999):
+            with patch("posts.views.get_storage", side_effect=AssertionError("storage must not be called")):
+                response = self.client.get(f"/api/v1/posts/{post_id}/media/read-urls/")
+            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_read_urls_storage_error_is_safe_503(self):
+        with patch("posts.views.get_storage", side_effect=StorageError("secret-key-token")):
+            response = self.client.get(f"/api/v1/posts/{self.post.id}/media/read-urls/")
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertNotIn("secret-key-token", response.content.decode())
+        self.assertNotIn("token", response.content.decode().lower())
+
+    def test_read_urls_includes_video_poster_url(self):
+        video = self.ready_media(
+            kind=PostMedia.Kind.VIDEO,
+            position=0,
+            private_object_key="video",
+            private_poster_key="poster",
+        )
+        with patch.object(
+            self.storage,
+            "create_signed_read_url",
+            create=True,
+            side_effect=lambda key, ttl: f"https://signed.test/{key}",
+        ), patch("posts.views.get_storage", return_value=self.storage):
+            response = self.client.get(f"/api/v1/posts/{self.post.id}/media/read-urls/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["media"][0], {
+            "id": video.id,
+            "url": "https://signed.test/video",
+            "poster_url": "https://signed.test/poster",
+        })
 
     def test_upload_intent_validates_limits_and_creates_uuid_key(self):
         view_storage, service_storage = self.storage_patches()

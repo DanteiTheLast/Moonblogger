@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.db import transaction
@@ -347,3 +347,24 @@ class MediaLayoutView(PostMediaBaseView):
         except StorageError as exc:
             raise StorageAPIException(str(exc)) from exc
         return Response(PostSerializer(post).data)
+
+
+class MediaReadURLsView(PostMediaBaseView):
+    def get(self, request, post_id):
+        try:
+            post = self.get_post(post_id)
+        except Post.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        try:
+            storage = get_storage()
+            media = post.media.filter(state=PostMedia.State.READY, position__isnull=False).order_by("position")
+            result = []
+            for item in media:
+                entry = {"id": item.id, "url": storage.create_signed_read_url(item.private_object_key, settings.MEDIA_READ_URL_TTL_SECONDS)}
+                if item.kind == PostMedia.Kind.VIDEO and item.private_poster_key:
+                    entry["poster_url"] = storage.create_signed_read_url(item.private_poster_key, settings.MEDIA_READ_URL_TTL_SECONDS)
+                result.append(entry)
+        except StorageError as exc:
+            raise StorageAPIException() from exc
+        expires_at = timezone.now() + timedelta(seconds=settings.MEDIA_READ_URL_TTL_SECONDS)
+        return Response({"expires_at": expires_at.astimezone(dt_timezone.utc).isoformat().replace("+00:00", "Z"), "media": result})

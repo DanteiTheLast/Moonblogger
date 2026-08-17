@@ -135,3 +135,9 @@ data class MediaLayoutRequest(
     val items: List<MediaLayoutItem>,
     val carousel_transition: CarouselTransition,
 )
+
+@Serializable
+data class MediaReadUrl(val id: String, val url: String, val poster_url: String? = null)
+
+@Serializable
+data class MediaReadUrlsResponse(val expires_at: String, val media: List<MediaReadUrl> = emptyList())
