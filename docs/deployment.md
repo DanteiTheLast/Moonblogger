@@ -273,6 +273,17 @@ de 750 h/mes del plan free.
 - API: `GET /api/v1/health/` → `{"status": "ok"}`.
 - Web: `GET /` responde con el listado de publicaciones publicadas.
 
+### Diagnóstico de `media/complete` en Storage
+
+Si el `PUT` a una URL firmada termina pero `POST .../media/complete/` responde
+`503` con `Supabase Storage rechazó la consulta de metadata (HTTP NNN).`, el
+backend recibió el rechazo HTTP `NNN` al consultar `object/info`. El cliente
+solo recibe ese estado de proveedor: no se exponen URL firmada, clave del
+objeto, service role ni cuerpo de respuesta de Storage. En los logs de Render
+se registra de forma acotada `operation=object_info`, el estado HTTP y, cuando
+Storage los proporciona y son válidos, su `provider_code` y `request_id`; usar
+esos datos para investigar la configuración/permisos de Storage.
+
 ### Migraciones futuras
 
 Tras un cambio de modelo, aplicar migraciones contra la BD de producción desde

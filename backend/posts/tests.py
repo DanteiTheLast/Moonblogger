@@ -14,7 +14,13 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import Post, PostMedia, StorageDeletionTask
-from .storage import ObjectInfo, StorageError, StorageObjectNotFound, SupabaseStorage
+from .storage import (
+    ObjectInfo,
+    StorageError,
+    StorageObjectNotFound,
+    StorageRequestError,
+    SupabaseStorage,
+)
 from . import signals
 
 
@@ -472,6 +478,37 @@ class SupabaseStorageAdapterTests(APITestCase):
                     self.storage.get_object_info("private", "posts/a/asset")
 
     @patch("posts.storage.urlopen")
+    def test_object_info_request_error_is_safe_and_logs_limited_diagnostics(self, urlopen_mock):
+        signed_url = "https://project.test/object/info/private/posts/secret/asset?token=secret-token"
+        raw_body = "provider response containing secret-token and posts/secret/asset"
+        urlopen_mock.side_effect = HTTPError(
+            signed_url,
+            403,
+            "forbidden",
+            {"X-Request-ID": "request-123", "X-Unrelated": "ignore-me"},
+            io.BytesIO(json.dumps({"code": "AccessDenied", "message": raw_body}).encode()),
+        )
+
+        with self.assertLogs("posts.storage", level="WARNING") as logs, self.assertRaises(
+            StorageRequestError
+        ) as raised:
+            self.storage.get_object_info("private", "posts/secret/asset")
+
+        error = raised.exception
+        self.assertEqual(error.http_status, 403)
+        self.assertEqual(error.status_code, 403)
+        self.assertEqual(error.provider_code, "AccessDenied")
+        self.assertEqual(error.request_id, "request-123")
+        self.assertEqual(
+            str(error), "Supabase Storage rechazó la consulta de metadata (HTTP 403)."
+        )
+        log_output = "\n".join(logs.output)
+        self.assertIn("operation=object_info status=403 provider_code=AccessDenied request_id=request-123", log_output)
+        for forbidden in (signed_url, "secret-token", "posts/secret/asset", raw_body):
+            self.assertNotIn(forbidden, str(error))
+            self.assertNotIn(forbidden, log_output)
+
+    @patch("posts.storage.urlopen")
     def test_delete_uses_documented_endpoint_and_404_is_idempotent(self, urlopen_mock):
         urlopen_mock.return_value = FakeHTTPResponse()
         self.storage.delete("public", "posts/a/asset")
@@ -628,6 +665,41 @@ class MediaAPITests(APITestCase):
         self.assertEqual(media.state, PostMedia.State.READY)
         request = urlopen_mock.call_args.args[0]
         self.assertEqual(request.get_method(), "GET")
+
+    @patch("posts.storage.urlopen")
+    def test_complete_returns_safe_metadata_storage_diagnostics(self, urlopen_mock):
+        signed_url = "https://storage.test/object/info/private/posts/secret/asset?token=secret-token"
+        raw_body = "raw storage body with secret-token and posts/secret/asset"
+        media = self.ready_media(
+            state=PostMedia.State.PENDING,
+            ready_at=None,
+            upload_expires_at=timezone.now() + timedelta(minutes=2),
+            private_object_key="posts/secret/asset",
+        )
+        storage = SupabaseStorage("https://storage.test", "not-a-real-secret", "private", "public")
+
+        for upstream_status in (400, 403, 500):
+            with self.subTest(upstream_status=upstream_status):
+                urlopen_mock.side_effect = HTTPError(
+                    signed_url,
+                    upstream_status,
+                    "upstream failure",
+                    {"X-Request-ID": "request-123"},
+                    io.BytesIO(json.dumps({"code": "AccessDenied", "message": raw_body}).encode()),
+                )
+                with patch("posts.views.get_storage", return_value=storage):
+                    response = self.client.post(
+                        f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(media.id)}
+                    )
+
+                self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+                self.assertEqual(
+                    response.data["detail"],
+                    f"Supabase Storage rechazó la consulta de metadata (HTTP {upstream_status}).",
+                )
+                response_text = str(response.data)
+                for forbidden in (signed_url, "secret-token", "posts/secret/asset", raw_body, "AccessDenied"):
+                    self.assertNotIn(forbidden, response_text)
 
     def test_complete_failure_states_are_persisted(self):
         expired = self.ready_media(

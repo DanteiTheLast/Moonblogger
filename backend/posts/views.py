@@ -29,7 +29,7 @@ from .services import (
     enqueue_storage_deletion,
     run_media_housekeeping,
 )
-from .storage import StorageError, StorageObjectNotFound, get_storage
+from .storage import StorageError, StorageObjectNotFound, StorageRequestError, get_storage
 
 
 class StorageAPIException(APIException):
@@ -231,6 +231,10 @@ class CompleteMediaView(PostMediaBaseView):
                     media.state = PostMedia.State.FAILED
                     media.save(update_fields=["state", "updated_at"])
                     failure = {"media": ["El objeto cargado no existe."]}
+                except StorageRequestError as exc:
+                    # The adapter's message deliberately includes only the
+                    # upstream HTTP status, never Storage response content.
+                    raise StorageAPIException(str(exc)) from exc
                 except StorageError as exc:
                     raise StorageAPIException(str(exc)) from exc
                 else:

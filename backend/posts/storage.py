@@ -1,12 +1,23 @@
 """Small, replaceable Supabase Storage REST adapter (no file bytes pass Django)."""
 
 import json
+import logging
+import re
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
+
+# Error payloads are diagnostic input from an external service.  A small cap
+# permits recognition of Storage's structured error codes without retaining or
+# logging arbitrary response content.
+MAX_ERROR_RESPONSE_BYTES = 4096
+_SAFE_PROVIDER_VALUE = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
 
 
 class StorageError(Exception):
@@ -19,6 +30,21 @@ class StorageUnavailable(StorageError):
 
 class StorageObjectNotFound(StorageError):
     pass
+
+
+class StorageRequestError(StorageError):
+    """A safe, metadata-only diagnostic for an HTTP Storage rejection."""
+
+    def __init__(self, http_status, provider_code=None, request_id=None):
+        self.http_status = http_status
+        # ``status_code`` is retained as an intuitive alias for callers that
+        # need the upstream HTTP status; it is not a DRF response status.
+        self.status_code = http_status
+        self.provider_code = provider_code
+        self.request_id = request_id
+        super().__init__(
+            f"Supabase Storage rechazó la consulta de metadata (HTTP {http_status})."
+        )
 
 
 @dataclass(frozen=True)
@@ -34,7 +60,7 @@ class SupabaseStorage:
         self.private_bucket = private_bucket
         self.public_bucket = public_bucket
 
-    def _request(self, method, path, payload=None):
+    def _request(self, method, path, payload=None, operation=None):
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             f"{self.base_url}/storage/v1{path}",
@@ -51,23 +77,64 @@ class SupabaseStorage:
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
-            if self._is_not_found_error(exc):
+            error_data = self._read_error_data(exc)
+            provider_code = self._safe_provider_value(error_data.get("code"))
+            request_id = self._request_id(exc)
+            if operation == "object_info":
+                logger.warning(
+                    "Supabase Storage request rejected operation=object_info status=%s "
+                    "provider_code=%s request_id=%s",
+                    exc.code,
+                    provider_code or "-",
+                    request_id or "-",
+                )
+            if self._is_not_found_error(exc.code, error_data):
                 raise StorageObjectNotFound("El objeto de Storage no existe.") from exc
+            if operation == "object_info":
+                raise StorageRequestError(exc.code, provider_code, request_id) from exc
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
         except (URLError, ValueError) as exc:
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
 
     @staticmethod
-    def _is_not_found_error(error):
-        if error.code == 404:
-            return True
-        if error.code != 400:
-            return False
+    def _read_error_data(error):
+        """Read a bounded HTTP error response exactly once and parse JSON safely."""
         try:
-            data = json.loads(error.read().decode("utf-8"))
-        except (AttributeError, UnicodeDecodeError, ValueError):
+            raw = error.read(MAX_ERROR_RESPONSE_BYTES)
+            if not isinstance(raw, bytes):
+                return {}
+            data = json.loads(raw.decode("utf-8"))
+        except (AttributeError, TypeError, UnicodeDecodeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _safe_provider_value(value):
+        if isinstance(value, str) and _SAFE_PROVIDER_VALUE.fullmatch(value):
+            return value
+        return None
+
+    @classmethod
+    def _request_id(cls, error):
+        headers = getattr(error, "headers", None)
+        if not headers:
+            return None
+        try:
+            header_items = headers.items()
+        except AttributeError:
+            return None
+        for name, value in header_items:
+            if str(name).lower() in {"x-request-id", "x-supabase-request-id"}:
+                return cls._safe_provider_value(value)
+        return None
+
+    @staticmethod
+    def _is_not_found_error(status_code, error_data):
+        if status_code == 404:
+            return True
+        if status_code != 400:
             return False
-        return data.get("code") == "NoSuchKey" or data.get("statusCode") == "404"
+        return error_data.get("code") == "NoSuchKey" or error_data.get("statusCode") == "404"
 
     def create_upload_url(self, object_key, expires_in):
         data = self._request(
@@ -83,6 +150,7 @@ class SupabaseStorage:
         data = self._request(
             "GET",
             f"/object/info/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
+            operation="object_info",
         )
         try:
             raw_size = data["size"]
