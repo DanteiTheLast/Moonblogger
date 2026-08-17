@@ -98,7 +98,7 @@ class AppContainer(context: Context) {
     val authRepository: AuthRepository = AuthRepository(authApi)
     val postRepository: PostRepository = PostRepository(postsApi)
     val mediaRepository: MediaRepository = MediaRepository(postsApi, SignedUrlUploader(signedUploadOkHttpClient))
-    val photoSourceProvider: PhotoSourceProvider = PhotoSourceProvider(appContext.contentResolver)
+    val photoSourceProvider: PhotoSourceProvider = PhotoSourceProvider(appContext.contentResolver, appContext.cacheDir)
 
     val viewModelFactory: MoonBloggerViewModelFactory = MoonBloggerViewModelFactory(this)
 }

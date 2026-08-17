@@ -1,10 +1,12 @@
 package com.moonblogger.app.data.media
 
 import com.moonblogger.app.data.model.CarouselTransition
+import com.moonblogger.app.data.remote.ApiErrors
 import com.moonblogger.app.data.remote.PostsApi
 import com.moonblogger.app.testutil.SAMPLE_POST_JSON
 import com.moonblogger.app.testutil.jsonResponse
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import mockwebserver3.MockWebServer
@@ -13,10 +15,12 @@ import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import retrofit2.Retrofit
+import retrofit2.HttpException
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 class MediaRepositoryTest {
@@ -76,6 +80,33 @@ class MediaRepositoryTest {
         assertEquals("POST", complete.method)
         assertEquals("/api/v1/posts/5/media/complete/", complete.url.encodedPath)
         assertTrue(complete.body!!.utf8().contains(mediaId))
+    }
+
+    @Test
+    fun `complete 400 retains media ID and exposes DRF detail`() = runBlocking {
+        val mediaId = "f7b0bd3c-25ee-45c4-8d4c-9f514f211a55"
+        server.enqueue(
+            jsonResponse(
+                201,
+                """{"media_id":"$mediaId","upload_url":"${server.url("/signed/asset")}","expires_at":"2026-08-16T12:00:00Z"}""",
+            ),
+        )
+        server.enqueue(mockwebserver3.MockResponse(code = 200))
+        server.enqueue(jsonResponse(400, """{"detail":"El objeto cargado no coincide con el intent."}"""))
+
+        val result = repository.uploadPhoto(
+            5,
+            UploadFile("image/png", 3, 20, 10) { ByteArrayInputStream(byteArrayOf(1, 2, 3)) },
+        )
+
+        val error = result.exceptionOrNull()
+        assertNotNull(error)
+        assertTrue(error is MediaUploadException)
+        assertFalse(error is IOException)
+        val uploadError = error as MediaUploadException
+        assertEquals(mediaId, uploadError.mediaId)
+        assertTrue(uploadError.cause is HttpException)
+        assertEquals("El objeto cargado no coincide con el intent.", ApiErrors.userMessage(uploadError))
     }
 
     @Test

@@ -34,7 +34,7 @@ class SupabaseStorage:
         self.private_bucket = private_bucket
         self.public_bucket = public_bucket
 
-    def _request(self, method, path, payload=None, headers_only=False):
+    def _request(self, method, path, payload=None):
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             f"{self.base_url}/storage/v1{path}",
@@ -48,22 +48,31 @@ class SupabaseStorage:
         )
         try:
             with urlopen(request, timeout=10) as response:
-                if headers_only:
-                    return response.headers
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
-            if exc.code == 404:
+            if self._is_not_found_error(exc):
                 raise StorageObjectNotFound("El objeto de Storage no existe.") from exc
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
         except (URLError, ValueError) as exc:
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
 
+    @staticmethod
+    def _is_not_found_error(error):
+        if error.code == 404:
+            return True
+        if error.code != 400:
+            return False
+        try:
+            data = json.loads(error.read().decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, ValueError):
+            return False
+        return data.get("code") == "NoSuchKey" or data.get("statusCode") == "404"
+
     def create_upload_url(self, object_key, expires_in):
         data = self._request(
             "POST",
             f"/object/upload/sign/{quote(self.private_bucket, safe='')}/{quote(object_key, safe='/')}",
-            {"expiresIn": expires_in},
         )
         signed_url = data.get("url") or data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
@@ -71,15 +80,21 @@ class SupabaseStorage:
         return signed_url if signed_url.startswith("http") else f"{self.base_url}/storage/v1{signed_url}"
 
     def get_object_info(self, bucket, object_key):
-        headers = self._request(
-            "HEAD",
+        data = self._request(
+            "GET",
             f"/object/info/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
-            headers_only=True,
         )
         try:
+            raw_size = data["size"]
+            if isinstance(raw_size, bool) or not isinstance(raw_size, (int, str)):
+                raise ValueError
+            size_bytes = int(raw_size)
+            mime_type = data["content_type"]
+            if size_bytes < 0 or not isinstance(mime_type, str) or not mime_type:
+                raise ValueError
             return ObjectInfo(
-                size_bytes=int(headers["Content-Length"]),
-                mime_type=headers["Content-Type"],
+                size_bytes=size_bytes,
+                mime_type=mime_type,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise StorageError("Supabase Storage devolvió metadatos inválidos.") from exc

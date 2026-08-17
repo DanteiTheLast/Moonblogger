@@ -48,15 +48,31 @@ object ApiErrors {
 
     /** Convierte una excepción de la capa de red en un mensaje para el usuario. */
     fun userMessage(throwable: Throwable): String {
-        return when (throwable) {
-            is HttpException -> {
-                val body = throwable.response()?.errorBody()?.string()
-                parseErrorMessage(body) ?: "Error del servidor (código ${throwable.code()})."
-            }
-
-            is IOException -> "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+        throwable.findHttpException()?.let { error ->
+            val body = runCatching { error.response()?.errorBody()?.string() }.getOrNull()
+            return parseErrorMessage(body) ?: "Error del servidor (código ${error.code()})."
+        }
+        return when {
+            throwable.hasCause<IOException>() ->
+                "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
 
             else -> throwable.message ?: "Ha ocurrido un error inesperado."
+        }
+    }
+
+    /** Busca primero los errores HTTP anidados por flujos que conservan contexto adicional. */
+    private fun Throwable.findHttpException(): HttpException? =
+        causeSequence().filterIsInstance<HttpException>().firstOrNull()
+
+    private inline fun <reified T : Throwable> Throwable.hasCause(): Boolean =
+        causeSequence().any { it is T }
+
+    private fun Throwable.causeSequence(): Sequence<Throwable> = sequence {
+        val seen = mutableSetOf<Throwable>()
+        var current: Throwable? = this@causeSequence
+        while (current != null && seen.add(current)) {
+            yield(current)
+            current = current.cause
         }
     }
 }

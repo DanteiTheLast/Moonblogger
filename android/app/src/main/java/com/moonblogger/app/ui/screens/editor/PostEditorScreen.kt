@@ -174,10 +174,18 @@ fun PostEditorScreen(
                         onClick = {
                             photoPicker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                         },
-                        enabled = !state.isSaving && state.media.size < 10,
+                        enabled = !state.isSaving && !state.isInspecting && state.media.size < 10,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Elegir fotos")
+                        if (state.isInspecting) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Elegir fotos")
+                        }
+                    }
+
+                    if (state.isInspecting) {
+                        Text("Procesando fotos seleccionadas…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     state.media.forEachIndexed { index, media ->
@@ -185,7 +193,7 @@ fun PostEditorScreen(
                             item = media,
                             index = index,
                             count = state.media.size,
-                            enabled = !state.isSaving,
+                            enabled = !state.isSaving && !state.isInspecting,
                             onMoveUp = { viewModel.moveMedia(media.key, -1) },
                             onMoveDown = { viewModel.moveMedia(media.key, 1) },
                             onSetCover = { viewModel.setCover(media.key) },

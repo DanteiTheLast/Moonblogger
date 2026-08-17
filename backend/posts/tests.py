@@ -356,14 +356,36 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertEqual(request.get_method(), "POST")
         self.assertIn("/object/upload/sign/private/posts/a/asset", request.full_url)
         self.assertNotIn("not-a-real-secret", request.full_url)
+        self.assertIsNone(request.data)
 
     @patch("posts.storage.urlopen")
-    def test_object_info_uses_head_headers(self, urlopen_mock):
-        urlopen_mock.return_value = FakeHTTPResponse(headers={"Content-Length": "123", "Content-Type": "image/jpeg"})
+    def test_object_info_uses_get_json_metadata(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse(
+            json.dumps({"size": 123, "content_type": "image/jpeg"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
         self.assertEqual(self.storage.get_object_info("private", "posts/a/asset"), ObjectInfo(123, "image/jpeg"))
         request = urlopen_mock.call_args.args[0]
-        self.assertEqual(request.get_method(), "HEAD")
+        self.assertEqual(request.get_method(), "GET")
         self.assertIn("/object/info/private/posts/a/asset", request.full_url)
+
+    @patch("posts.storage.urlopen")
+    def test_object_info_rejects_invalid_json_metadata(self, urlopen_mock):
+        for data in ({"content_type": "image/jpeg"}, {"size": 123, "content_type": ""}):
+            with self.subTest(data=data):
+                urlopen_mock.return_value = FakeHTTPResponse(json.dumps(data).encode())
+                with self.assertRaises(StorageError):
+                    self.storage.get_object_info("private", "posts/a/asset")
+
+    @patch("posts.storage.urlopen")
+    def test_object_info_classifies_supabase_not_found_errors(self, urlopen_mock):
+        for data in ({"code": "NoSuchKey"}, {"statusCode": "404"}):
+            with self.subTest(data=data):
+                urlopen_mock.side_effect = HTTPError(
+                    "https://project.test", 400, "missing", {}, io.BytesIO(json.dumps(data).encode())
+                )
+                with self.assertRaises(StorageObjectNotFound):
+                    self.storage.get_object_info("private", "posts/a/asset")
 
     @patch("posts.storage.urlopen")
     def test_delete_uses_documented_endpoint_and_404_is_idempotent(self, urlopen_mock):
@@ -486,6 +508,27 @@ class MediaAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         media.refresh_from_db()
         self.assertEqual(media.state, PostMedia.State.READY)
+
+    @patch("posts.storage.urlopen")
+    def test_complete_marks_ready_with_supabase_object_info(self, urlopen_mock):
+        media = self.ready_media(
+            state=PostMedia.State.PENDING,
+            ready_at=None,
+            upload_expires_at=timezone.now() + timedelta(minutes=2),
+        )
+        urlopen_mock.return_value = FakeHTTPResponse(
+            json.dumps({"size": media.size_bytes, "content_type": media.mime_type}).encode()
+        )
+        storage = SupabaseStorage("https://storage.test", "not-a-real-secret", "private", "public")
+        with patch("posts.views.get_storage", return_value=storage):
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(media.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        media.refresh_from_db()
+        self.assertEqual(media.state, PostMedia.State.READY)
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
 
     def test_complete_failure_states_are_persisted(self):
         expired = self.ready_media(

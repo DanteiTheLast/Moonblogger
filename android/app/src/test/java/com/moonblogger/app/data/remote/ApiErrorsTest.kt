@@ -1,8 +1,13 @@
 package com.moonblogger.app.data.remote
 
+import java.io.IOException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 
 class ApiErrorsTest {
 
@@ -30,5 +35,21 @@ class ApiErrorsTest {
     @Test
     fun `returns null for invalid JSON`() {
         assertNull(ApiErrors.parseErrorMessage("not-json"))
+    }
+
+    @Test
+    fun `uses DRF detail from nested HTTP exception before IO classification`() {
+        val httpError = HttpException(
+            Response.error<Any>(
+                400,
+                """{"detail":"La imagen no coincide con el intent."}"""
+                    .toResponseBody("application/json".toMediaType()),
+            ),
+        )
+
+        assertEquals(
+            "La imagen no coincide con el intent.",
+            ApiErrors.userMessage(IOException("wrapper", httpError)),
+        )
     }
 }

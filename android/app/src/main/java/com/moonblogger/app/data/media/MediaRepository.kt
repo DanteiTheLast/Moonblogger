@@ -8,7 +8,6 @@ import com.moonblogger.app.data.model.MediaMetadataRequest
 import com.moonblogger.app.data.model.UploadIntentRequest
 import com.moonblogger.app.data.remote.PostsApi
 import com.moonblogger.app.data.remote.safeApiCall
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 
 /** Archivo de imagen listo para transferirse, sin conservar ninguna URL firmada. */
@@ -20,8 +19,12 @@ data class UploadFile(
     val openStream: () -> java.io.InputStream,
 )
 
-/** Permite limpiar el intent creado si la carga o complete no llegan a terminar. */
-class MediaUploadException(val mediaId: String, cause: Throwable) : IOException(cause.message, cause)
+/**
+ * Conserva el identificador necesario para limpiar el intent creado si la carga
+ * o `complete` fallan. No es una [java.io.IOException]: `complete` puede fallar
+ * con un [retrofit2.HttpException] cuyo detalle DRF debe llegar a la UI.
+ */
+class MediaUploadException(val mediaId: String, cause: Throwable) : Exception(null, cause)
 
 /**
  * Orquesta las rutas autenticadas de media. La URL firmada solo existe en la

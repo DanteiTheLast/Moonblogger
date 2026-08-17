@@ -80,8 +80,10 @@ efímera de Supabase.
 - Cada intent usa claves inmutables generadas con UUID y sin `upsert`.
   `MEDIA_INTENT_TTL_SECONDS` (el alias anterior `MEDIA_UPLOAD_TTL_SECONDS` se
   acepta) es el plazo interno para `complete` y limpieza; no revoca una URL
-  firmada que Supabase ya haya emitido. `complete` comprueba existencia, MIME y
-  tamaño del objeto contra el intent, incluido MIME/tamaño exactos del póster.
+  firmada que Supabase ya haya emitido y no se transmite como `expiresIn` a
+  Supabase. `complete` consulta `GET /storage/v1/object/info/{bucket}/{path}` y
+  comprueba los campos JSON `size` y `content_type` contra el intent (incluido
+  MIME/tamaño exactos del póster); no usa los headers HTTP de esa respuesta.
 - Solo elementos `ready` pueden entrar al layout. Las posiciones deben ser
   `0..n-1`; un layout no vacío tiene exactamente una portada. Pending/failed no
   se exponen públicamente.

@@ -8,6 +8,7 @@ import com.moonblogger.app.data.media.LayoutMedia
 import com.moonblogger.app.data.media.MediaRepository
 import com.moonblogger.app.data.media.MediaUploadException
 import com.moonblogger.app.data.media.PhotoSourceProvider
+import com.moonblogger.app.data.media.PhotoRejectionReason
 import com.moonblogger.app.data.model.CarouselTransition
 import com.moonblogger.app.data.model.PostMedia
 import com.moonblogger.app.data.model.PostStatus
@@ -45,6 +46,8 @@ data class PostEditorUiState(
     val media: List<EditorMedia> = emptyList(),
     val deletedMediaIds: Set<String> = emptySet(),
     val isMediaDirty: Boolean = false,
+    /** Hay URIs concedidas temporalmente copiándose e inspeccionándose en IO. */
+    val isInspecting: Boolean = false,
     val isSaving: Boolean = false,
     /** Número de fotos confirmadas o en curso frente al total local a subir. */
     val uploadProgress: Pair<Int, Int>? = null,
@@ -53,7 +56,7 @@ data class PostEditorUiState(
     val isSaved: Boolean = false,
 ) {
     val canSubmit: Boolean
-        get() = title.isNotBlank() && content.isNotBlank() && !isSaving && !isLoading
+        get() = title.isNotBlank() && content.isNotBlank() && !isSaving && !isInspecting && !isLoading
 }
 
 /** Editor de posts y fotos: las cargas se completan antes de publicar. */
@@ -113,27 +116,42 @@ class PostEditorViewModel(
     /** Se invoca con URIs otorgados temporalmente por Photo Picker, nunca con permiso de galería. */
     fun onPhotosSelected(uris: List<Uri>) {
         if (uris.isEmpty()) return
+        var inspectionStarted = false
+        _uiState.update { state ->
+            if (state.isSaving || state.isInspecting) {
+                state
+            } else {
+                inspectionStarted = true
+                state.copy(isInspecting = true, error = null)
+            }
+        }
+        if (!inspectionStarted) return
         viewModelScope.launch {
             val inspected = withContext(Dispatchers.IO) { photoSourceProvider.inspect(uris) }
-            _uiState.update { state ->
-                if (state.isSaving) return@update state
-                val slots = (MAX_PHOTOS - state.media.size).coerceAtLeast(0)
-                val accepted = inspected.photos.take(slots).mapIndexed { index, photo ->
-                    EditorMedia(
-                        key = "local:${UUID.randomUUID()}",
-                        localPhoto = photo,
-                        mimeType = photo.mimeType,
-                        isCover = state.media.isEmpty() && index == 0,
-                    )
-                }
-                val omitted = inspected.rejectedCount + (inspected.photos.size - accepted.size)
-                state.copy(
-                    media = (state.media + accepted).ensureCover(),
-                    isMediaDirty = state.isMediaDirty || accepted.isNotEmpty(),
-                    error = when {
-                        omitted > 0 -> "Solo se añadieron imágenes JPEG, PNG o WebP de hasta 8 MiB. Máximo 10 fotos."
-                        else -> null
-                    },
+            val state = _uiState.value
+            if (state.isSaving) {
+                inspected.photos.forEach(photoSourceProvider::release)
+                _uiState.update { it.copy(isInspecting = false) }
+                return@launch
+            }
+            val slots = (MAX_PHOTOS - state.media.size).coerceAtLeast(0)
+            val acceptedPhotos = inspected.photos.take(slots)
+            inspected.photos.drop(slots).forEach(photoSourceProvider::release)
+            val accepted = acceptedPhotos.mapIndexed { index, photo ->
+                EditorMedia(
+                    key = "local:${UUID.randomUUID()}",
+                    localPhoto = photo,
+                    mimeType = photo.mimeType,
+                    isCover = state.media.isEmpty() && index == 0,
+                )
+            }
+            val omittedForCapacity = inspected.photos.size - accepted.size
+            _uiState.update {
+                it.copy(
+                    media = (it.media + accepted).ensureCover(),
+                    isMediaDirty = it.isMediaDirty || accepted.isNotEmpty(),
+                    isInspecting = false,
+                    error = selectionMessage(inspected.rejections.map { rejection -> rejection.reason }, omittedForCapacity),
                 )
             }
         }
@@ -142,6 +160,7 @@ class PostEditorViewModel(
     fun removeMedia(key: String) {
         _uiState.update { state ->
             val item = state.media.firstOrNull { it.key == key } ?: return@update state
+            item.localPhoto?.let(photoSourceProvider::release)
             state.copy(
                 media = state.media.filterNot { it.key == key }.ensureCover(),
                 deletedMediaIds = item.mediaId?.let { state.deletedMediaIds + it } ?: state.deletedMediaIds,
@@ -188,6 +207,7 @@ class PostEditorViewModel(
 
     fun save() {
         val snapshot = _uiState.value
+        if (snapshot.isInspecting) return
         val title = snapshot.title.trim()
         val content = snapshot.content.trim()
         if (title.isBlank() || content.isBlank()) {
@@ -282,6 +302,7 @@ class PostEditorViewModel(
     }
 
     private fun finish(error: Throwable?, keptAsDraft: Boolean = false) {
+        if (error == null) photoSourceProvider.clearTemporaryFiles()
         _uiState.update {
             if (error == null) {
                 it.copy(isSaving = false, uploadProgress = null, uploadMessage = null, isSaved = true)
@@ -298,6 +319,32 @@ class PostEditorViewModel(
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        photoSourceProvider.clearTemporaryFiles()
+        super.onCleared()
+    }
+
+    private fun selectionMessage(
+        rejections: List<PhotoRejectionReason>,
+        omittedForCapacity: Int,
+    ): String? {
+        val messages = buildList {
+            if (PhotoRejectionReason.FILE_TOO_LARGE in rejections) add("Algunas fotos superan el límite de 8 MiB.")
+            if (PhotoRejectionReason.EMPTY_FILE in rejections) add("Algunas fotos seleccionadas están vacías.")
+            if (PhotoRejectionReason.UNSUPPORTED_IMAGE_FORMAT in rejections) {
+                add("Algunas fotos no son JPEG, PNG ni WebP válidas.")
+            }
+            if (PhotoRejectionReason.INVALID_IMAGE in rejections) {
+                add("Algunas fotos no tienen dimensiones de imagen válidas.")
+            }
+            if (PhotoRejectionReason.SOURCE_UNREADABLE in rejections) {
+                add("No se pudo leer alguna foto seleccionada.")
+            }
+            if (omittedForCapacity > 0) add("Solo se pueden añadir hasta 10 fotos.")
+        }
+        return messages.takeIf { it.isNotEmpty() }?.joinToString(" ")
     }
 
     private fun PostMedia.toEditorMedia() = EditorMedia(
