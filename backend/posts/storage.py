@@ -33,7 +33,7 @@ class StorageObjectNotFound(StorageError):
 
 
 class StorageRequestError(StorageError):
-    """A safe, metadata-only diagnostic for an HTTP Storage rejection."""
+    """A safe diagnostic for an HTTP rejection while checking an object."""
 
     def __init__(self, http_status, provider_code=None, request_id=None):
         self.http_status = http_status
@@ -43,7 +43,7 @@ class StorageRequestError(StorageError):
         self.provider_code = provider_code
         self.request_id = request_id
         super().__init__(
-            f"Supabase Storage rechazó la consulta de metadata (HTTP {http_status})."
+            f"Supabase Storage rechazó HEAD del objeto (HTTP {http_status})."
         )
 
 
@@ -60,7 +60,7 @@ class SupabaseStorage:
         self.private_bucket = private_bucket
         self.public_bucket = public_bucket
 
-    def _request(self, method, path, payload=None, operation=None):
+    def _request(self, method, path, payload=None, operation=None, response_headers=False):
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             f"{self.base_url}/storage/v1{path}",
@@ -74,6 +74,11 @@ class SupabaseStorage:
         )
         try:
             with urlopen(request, timeout=10) as response:
+                if response_headers:
+                    # HEAD is the object-existence endpoint.  Its useful
+                    # metadata is in the response headers; do not attempt to
+                    # read or parse an object response body.
+                    return response.headers
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
@@ -93,7 +98,13 @@ class SupabaseStorage:
             if operation == "object_info":
                 raise StorageRequestError(exc.code, provider_code, request_id) from exc
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
-        except (URLError, ValueError) as exc:
+        except URLError as exc:
+            if operation == "object_info":
+                raise StorageError(
+                    "Supabase Storage no está disponible para verificar el objeto."
+                ) from exc
+            raise StorageError("Supabase Storage no pudo completar la operación.") from exc
+        except ValueError as exc:
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
 
     @staticmethod
@@ -147,25 +158,26 @@ class SupabaseStorage:
         return signed_url if signed_url.startswith("http") else f"{self.base_url}/storage/v1{signed_url}"
 
     def get_object_info(self, bucket, object_key):
-        data = self._request(
-            "GET",
-            f"/object/info/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
+        headers = self._request(
+            "HEAD",
+            f"/object/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
             operation="object_info",
+            response_headers=True,
         )
         try:
-            raw_size = data["size"]
+            raw_size = headers.get("Content-Length")
             if isinstance(raw_size, bool) or not isinstance(raw_size, (int, str)):
                 raise ValueError
             size_bytes = int(raw_size)
-            mime_type = data["content_type"]
-            if size_bytes < 0 or not isinstance(mime_type, str) or not mime_type:
+            mime_type = headers.get("Content-Type")
+            if size_bytes < 0 or not isinstance(mime_type, str) or not mime_type.strip():
                 raise ValueError
             return ObjectInfo(
                 size_bytes=size_bytes,
-                mime_type=mime_type,
+                mime_type=mime_type.strip(),
             )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise StorageError("Supabase Storage devolvió metadatos inválidos.") from exc
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise StorageError("Supabase Storage devolvió encabezados de objeto inválidos.") from exc
 
     def promote(self, object_key):
         self._request(

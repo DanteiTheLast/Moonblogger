@@ -276,13 +276,21 @@ de 750 h/mes del plan free.
 ### Diagnóstico de `media/complete` en Storage
 
 Si el `PUT` a una URL firmada termina pero `POST .../media/complete/` responde
-`503` con `Supabase Storage rechazó la consulta de metadata (HTTP NNN).`, el
-backend recibió el rechazo HTTP `NNN` al consultar `object/info`. El cliente
-solo recibe ese estado de proveedor: no se exponen URL firmada, clave del
+`503` con `Supabase Storage rechazó HEAD del objeto (HTTP NNN).`, el backend
+recibió el rechazo HTTP `NNN` al consultar exactamente
+`HEAD /storage/v1/object/{bucket}/{path}`. Ese endpoint obtiene `Content-Length`
+y `Content-Type` del asset privado real; no se usa `GET /object/info`. El cliente
+solo recibe el estado de proveedor: no se exponen URL firmada, clave del
 objeto, service role ni cuerpo de respuesta de Storage. En los logs de Render
 se registra de forma acotada `operation=object_info`, el estado HTTP y, cuando
 Storage los proporciona y son válidos, su `provider_code` y `request_id`; usar
 esos datos para investigar la configuración/permisos de Storage.
+
+Si no se puede conectar a Storage, `complete` informa que Storage no está
+disponible para verificar el objeto. Si la respuesta HEAD no contiene un
+`Content-Length` entero no negativo y un `Content-Type` no vacío, informa que
+los encabezados del objeto son inválidos. Ambos diagnósticos son seguros y no
+incluyen URL, claves, service role ni cuerpo del proveedor.
 
 ### Migraciones futuras
 

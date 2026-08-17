@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import override_settings
 from django.utils import timezone
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -423,8 +423,10 @@ class FakeHTTPResponse:
     def __init__(self, body=b"", headers=None):
         self.body = body
         self.headers = headers or {}
+        self.read_calls = 0
 
     def read(self):
+        self.read_calls += 1
         return self.body
 
     def __enter__(self):
@@ -449,37 +451,62 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertIsNone(request.data)
 
     @patch("posts.storage.urlopen")
-    def test_object_info_uses_get_json_metadata(self, urlopen_mock):
-        urlopen_mock.return_value = FakeHTTPResponse(
-            json.dumps({"size": 123, "content_type": "image/jpeg"}).encode(),
-            headers={"Content-Type": "application/json"},
+    def test_object_info_uses_head_exact_object_path_and_asset_headers(self, urlopen_mock):
+        response = FakeHTTPResponse(
+            headers={"Content-Length": "123", "Content-Type": "image/jpeg"}
         )
+        urlopen_mock.return_value = response
         self.assertEqual(self.storage.get_object_info("private", "posts/a/asset"), ObjectInfo(123, "image/jpeg"))
         request = urlopen_mock.call_args.args[0]
-        self.assertEqual(request.get_method(), "GET")
-        self.assertIn("/object/info/private/posts/a/asset", request.full_url)
+        self.assertEqual(request.get_method(), "HEAD")
+        self.assertEqual(
+            request.full_url,
+            "https://project.test/storage/v1/object/private/posts/a/asset",
+        )
+        self.assertNotIn("/object/info/", request.full_url)
+        self.assertEqual(response.read_calls, 0)
 
     @patch("posts.storage.urlopen")
-    def test_object_info_rejects_invalid_json_metadata(self, urlopen_mock):
-        for data in ({"content_type": "image/jpeg"}, {"size": 123, "content_type": ""}):
-            with self.subTest(data=data):
-                urlopen_mock.return_value = FakeHTTPResponse(json.dumps(data).encode())
-                with self.assertRaises(StorageError):
+    def test_object_info_rejects_missing_or_invalid_headers(self, urlopen_mock):
+        invalid_headers = (
+            {},
+            {"Content-Type": "image/jpeg"},
+            {"Content-Length": "not-an-integer", "Content-Type": "image/jpeg"},
+            {"Content-Length": "-1", "Content-Type": "image/jpeg"},
+            {"Content-Length": "123"},
+            {"Content-Length": "123", "Content-Type": "   "},
+            {"Content-Length": "123", "Content-Type": 42},
+        )
+        for headers in invalid_headers:
+            with self.subTest(headers=headers):
+                urlopen_mock.return_value = FakeHTTPResponse(headers=headers)
+                with self.assertRaisesRegex(
+                    StorageError, "Supabase Storage devolvió encabezados de objeto inválidos."
+                ):
                     self.storage.get_object_info("private", "posts/a/asset")
 
     @patch("posts.storage.urlopen")
     def test_object_info_classifies_supabase_not_found_errors(self, urlopen_mock):
-        for data in ({"code": "NoSuchKey"}, {"statusCode": "404"}):
-            with self.subTest(data=data):
+        cases = (
+            (400, {"code": "NoSuchKey"}),
+            (400, {"statusCode": "404"}),
+            (404, None),
+        )
+        for upstream_status, data in cases:
+            with self.subTest(upstream_status=upstream_status, data=data):
                 urlopen_mock.side_effect = HTTPError(
-                    "https://project.test", 400, "missing", {}, io.BytesIO(json.dumps(data).encode())
+                    "https://project.test",
+                    upstream_status,
+                    "missing",
+                    {},
+                    io.BytesIO(json.dumps(data).encode()) if data else None,
                 )
                 with self.assertRaises(StorageObjectNotFound):
                     self.storage.get_object_info("private", "posts/a/asset")
 
     @patch("posts.storage.urlopen")
     def test_object_info_request_error_is_safe_and_logs_limited_diagnostics(self, urlopen_mock):
-        signed_url = "https://project.test/object/info/private/posts/secret/asset?token=secret-token"
+        signed_url = "https://project.test/object/private/posts/secret/asset?token=secret-token"
         raw_body = "provider response containing secret-token and posts/secret/asset"
         urlopen_mock.side_effect = HTTPError(
             signed_url,
@@ -500,13 +527,33 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertEqual(error.provider_code, "AccessDenied")
         self.assertEqual(error.request_id, "request-123")
         self.assertEqual(
-            str(error), "Supabase Storage rechazó la consulta de metadata (HTTP 403)."
+            str(error), "Supabase Storage rechazó HEAD del objeto (HTTP 403)."
         )
         log_output = "\n".join(logs.output)
         self.assertIn("operation=object_info status=403 provider_code=AccessDenied request_id=request-123", log_output)
         for forbidden in (signed_url, "secret-token", "posts/secret/asset", raw_body):
             self.assertNotIn(forbidden, str(error))
             self.assertNotIn(forbidden, log_output)
+
+    @patch("posts.storage.urlopen")
+    def test_object_info_uses_distinct_safe_errors_for_network_and_header_failures(self, urlopen_mock):
+        urlopen_mock.side_effect = URLError("https://project.test/posts/secret/asset?token=secret-token")
+        with self.assertRaisesRegex(
+            StorageError, "Supabase Storage no está disponible para verificar el objeto."
+        ) as network_error:
+            self.storage.get_object_info("private", "posts/secret/asset")
+
+        urlopen_mock.side_effect = None
+        urlopen_mock.return_value = FakeHTTPResponse(headers=object())
+        with self.assertRaisesRegex(
+            StorageError, "Supabase Storage devolvió encabezados de objeto inválidos."
+        ) as header_error:
+            self.storage.get_object_info("private", "posts/secret/asset")
+
+        self.assertNotEqual(str(network_error.exception), str(header_error.exception))
+        for forbidden in ("secret-token", "posts/secret/asset", "project.test"):
+            self.assertNotIn(forbidden, str(network_error.exception))
+            self.assertNotIn(forbidden, str(header_error.exception))
 
     @patch("posts.storage.urlopen")
     def test_delete_uses_documented_endpoint_and_404_is_idempotent(self, urlopen_mock):
@@ -653,7 +700,10 @@ class MediaAPITests(APITestCase):
             upload_expires_at=timezone.now() + timedelta(minutes=2),
         )
         urlopen_mock.return_value = FakeHTTPResponse(
-            json.dumps({"size": media.size_bytes, "content_type": media.mime_type}).encode()
+            headers={
+                "Content-Length": str(media.size_bytes),
+                "Content-Type": media.mime_type,
+            }
         )
         storage = SupabaseStorage("https://storage.test", "not-a-real-secret", "private", "public")
         with patch("posts.views.get_storage", return_value=storage):
@@ -664,11 +714,15 @@ class MediaAPITests(APITestCase):
         media.refresh_from_db()
         self.assertEqual(media.state, PostMedia.State.READY)
         request = urlopen_mock.call_args.args[0]
-        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.get_method(), "HEAD")
+        self.assertEqual(
+            request.full_url,
+            f"https://storage.test/storage/v1/object/private/{media.private_object_key}",
+        )
 
     @patch("posts.storage.urlopen")
     def test_complete_returns_safe_metadata_storage_diagnostics(self, urlopen_mock):
-        signed_url = "https://storage.test/object/info/private/posts/secret/asset?token=secret-token"
+        signed_url = "https://storage.test/object/private/posts/secret/asset?token=secret-token"
         raw_body = "raw storage body with secret-token and posts/secret/asset"
         media = self.ready_media(
             state=PostMedia.State.PENDING,
@@ -695,7 +749,7 @@ class MediaAPITests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
                 self.assertEqual(
                     response.data["detail"],
-                    f"Supabase Storage rechazó la consulta de metadata (HTTP {upstream_status}).",
+                    f"Supabase Storage rechazó HEAD del objeto (HTTP {upstream_status}).",
                 )
                 response_text = str(response.data)
                 for forbidden in (signed_url, "secret-token", "posts/secret/asset", raw_body, "AccessDenied"):
