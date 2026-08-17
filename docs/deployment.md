@@ -2,7 +2,7 @@
 
 Guía de despliegue a producción en planes gratuitos y de operación diaria.
 Precios y límites son los de los planes free (Render Free, Supabase Free,
-Vercel Hobby) en el momento de escribir este documento (11/08/2026).
+Vercel Hobby) en el momento de escribir este documento (17/08/2026).
 
 ## Arquitectura desplegada
 
@@ -228,9 +228,21 @@ BACKUP_DIR=<destino> \
 
 ## 6. Media: Supabase Storage (límites free)
 
-Cuando se implemente media (FileFields en modelos), los archivos vivirán en
-**Supabase Storage**, no en el filesystem de Render (efímero). La API emitirá
-signed URLs (delegación); no hará proxy de bytes.
+Media está implementada para imágenes y usa **Supabase Storage**, no el
+filesystem efímero de Render. La API emite signed upload URLs y no hace proxy
+de bytes. El flujo de imágenes fue validado en producción; el vídeo MP4 con
+póster está contratado por backend, pero no validado E2E desde Android.
+
+- El backend crea la signed upload URL con `POST
+  /storage/v1/object/upload/sign/{private_bucket}/{key}` y cuerpo `{}`; el
+  cliente hace `PUT` con el `Content-Type` declarado exactamente.
+- `MEDIA_INTENT_TTL_SECONDS` es el plazo interno para `complete`/limpieza, no
+  un TTL enviado a Supabase. Al completar, el backend comprueba el objeto con
+  `HEAD /storage/v1/object/{bucket}/{key}` y contrasta `Content-Length` y
+  `Content-Type` reales.
+- La eliminación en Storage usa `DELETE /storage/v1/object/{bucket}` con
+  `{"prefixes":[key]}`. No exponer claves de objetos ni credenciales en
+  clientes o documentación operativa.
 
 Límites del plan **Supabase Free** (agosto 2026):
 

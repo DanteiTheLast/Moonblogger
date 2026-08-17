@@ -161,11 +161,13 @@ qué alternativas se consideraron.
   (timeout 90 s + retry) para absorber el cold start. Región se elige al crear
   el blueprint (recomendada: cercana a Supabase `ca-central-1`).
 
-## D13 — Media: Supabase Storage (Etapa 1, 12/08/2026; actualizada 16/08/2026)
+## D13 — Media: Supabase Storage (Etapa 1, 12/08/2026; actualizada 17/08/2026)
 
-- **Decisión:** imágenes y vídeo MP4 se guardan en **Supabase Storage**, nunca
-  en el filesystem efímero de Render. Metadatos y outbox de limpieza viven en
-  PostgreSQL. La API emite signed upload URLs; no hace proxy de bytes.
+- **Decisión:** las imágenes (validadas E2E) y, en el contrato de backend, el
+  vídeo MP4 con póster se guardan en **Supabase Storage**, nunca en el filesystem
+  efímero de Render. Metadatos y outbox de limpieza viven en PostgreSQL. La API
+  emite signed upload URLs; no hace proxy de bytes. Vídeo Android/TUS no está
+  validado E2E.
 - **Por qué:** Render Free tiene filesystem efímero (se pierde en cada deploy/spin-up) y un solo worker; hacer proxy de archivos grandes agotaría el worker y excedería memoria/tiempo. Supabase Storage es nativo, gratis en plan free (1 GB), y signed URLs delegan la transferencia al cliente directamente contra el storage.
 - **Límites free documentados:**
   - Cuota total: **1 GB** (proyecto Supabase).
@@ -174,8 +176,18 @@ qué alternativas se consideraron.
 - **Implementación Etapa 1:** bucket privado para borradores, bucket público
   para assets activos publicados, claves UUID inmutables y copia privada→pública
   antes de publicar. La retirada encola la eliminación pública; su efecto puede
-  retrasarse por caché CDN. El comando `cleanup_media_storage` reprocesa la cola
-  y limpia intents vencidos.
+  retrasarse por caché CDN. Cada creación autenticada de un intent ejecuta
+  automáticamente housekeeping acotado: hasta 10 intents `pending`/`failed`
+  vencidos y 10 tareas de borrado del outbox. Así opera también en Render Free,
+  sin Shell ni cron; `cleanup_media_storage --limit N` queda disponible para
+  ejecuciones manuales donde haya Shell. Un intent fallido actual permanece
+  hasta su vencimiento (15 min por defecto) y un reintento activa la limpieza.
+- **Contrato de Storage consolidado:** crear signed upload con `POST
+  /storage/v1/object/upload/sign/{private_bucket}/{key}` y `{}`; verificar con
+  `HEAD /storage/v1/object/{bucket}/{key}` y los headers reales
+  `Content-Length`/`Content-Type`; borrar con `DELETE
+  /storage/v1/object/{bucket}` y `{"prefixes":[key]}`. El TTL de intent es
+  interno de la aplicación y no se envía al proveedor.
 - **Tradeoff operativo:** la promoción sigue siendo síncrona para mantener el
   contrato de publicación (si Storage falla, no se publica). La publicación de
   un post lista media sin `select_for_update` antes de copiar; el cambio de

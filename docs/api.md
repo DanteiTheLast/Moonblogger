@@ -64,7 +64,8 @@
 
 Estas rutas requieren JWT y devuelven `404` tanto para un post/media ajeno como
 inexistente. Django **no** recibe bytes: el cliente carga directamente a la URL
-efímera de Supabase.
+efímera de Supabase. El flujo de imágenes está validado E2E; el contrato de
+vídeo/póster sigue sin validación E2E desde Android.
 
 | Método | Ruta | Entrada | Respuesta |
 |---|---|---|---|
@@ -122,7 +123,11 @@ nunca en Android, web ni repositorio.
 
 1. Solicitar el intent; la respuesta contiene una `upload_url` efímera y, para
    vídeo, una `poster_upload_url` efímera. No se persisten ni se reemiten estas
-   URLs desde el backend.
+   URLs desde el backend. Internamente, el backend la solicita a Supabase
+   mediante `POST /storage/v1/object/upload/sign/{private_bucket}/{key}` con
+   cuerpo JSON `{}`. `MEDIA_INTENT_TTL_SECONDS` solo delimita el plazo de la
+   aplicación para completar o limpiar el intent; no se envía a Supabase ni
+   determina la vigencia de su URL firmada.
 2. Hacer `PUT` directamente a cada URL con el cuerpo binario del archivo y el
    header `Content-Type` exactamente igual al MIME declarado. No enviar JSON,
    `multipart/form-data`, ni `x-upsert`: la clave UUID es de una sola creación.
@@ -135,3 +140,7 @@ un post o retirar un asset del layout publicado, el backend borra las claves
 públicas mediante outbox y las limpia de la BD; una republicación las copia de
 nuevo. CDNs pueden servir una versión en caché transitoriamente hasta que su
 TTL propio venza; no es una garantía de revocación instantánea.
+
+La eliminación remota usa el contrato de Supabase
+`DELETE /storage/v1/object/{bucket}` con cuerpo `{"prefixes":[key]}`. Las
+claves se mantienen internas: no forman parte de la API de MoonBlogger.

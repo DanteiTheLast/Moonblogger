@@ -22,14 +22,33 @@ visitante leer las publicaciones que Moon haya publicado.
 - Publicaciones con título, contenido en texto plano y estado
   `draft` / `published` (publicado/borrador).
 - La web solo muestra publicaciones en estado `published`.
-- Desarrollo local primero; despliegue a producción como etapa final separada.
+- Producción desplegada: API en Render, PostgreSQL y Storage en Supabase, y web
+  Next.js en Vercel con ISR. Android se distribuye como APK release.
+- Multimedia de imágenes operativa de extremo a extremo: Android selecciona,
+  valida y carga al Storage privado mediante la API; al publicar se promueve al
+  bucket público y queda disponible en la API y web públicas.
 
 ## Fuera de alcance de la v1
 
 Comentarios, likes, categorías, social login, multi-usuario, edición desde la
-web, transcodificación de vídeo y canciones. La multimedia de posts (carga
-directa a Storage, imágenes/vídeos y carrusel) se añadió de forma acotada en la
-Etapa 1 de multimedia.
+web, transcodificación de vídeo y canciones. El contrato de backend contempla
+vídeo MP4 con póster, pero su carga desde Android y su flujo completo no están
+validados todavía.
+
+## Estado de sesión (17/08/2026)
+
+- Stack productivo: `https://moonblogger-api.onrender.com`, Supabase
+  PostgreSQL/Storage, Vercel ISR y APK Android release 0.1.2 (`versionCode` 3).
+- Flujo real verificado: post publicado `final-ending` (id 9), una imagen JPEG
+  720×1280 y `media_count: 1`; la respuesta pública confirmó URL de portada,
+  MIME y contador. Android usa Photo Picker, copia privada en `cacheDir` y
+  valida firma JPEG/PNG/WebP y tamaño máximo de 8 MiB antes de iniciar la carga.
+- No se debe afirmar que vídeo Android ni TUS funcionen: ambos siguen
+  pendientes de validación E2E. El backend sí mantiene el contrato de MP4 y
+  póster descrito en [API](api.md).
+- Verificado tras el ajuste final de Storage: 61 tests de backend aprobados y
+  flujo de producción anterior aprobado. Hitos relevantes en `main`:
+  `ec40115`, `3361c28`, `a6a2cbf`, `f7bd700`, `20b34ff` y `5155171`.
 
 ## Estética
 
