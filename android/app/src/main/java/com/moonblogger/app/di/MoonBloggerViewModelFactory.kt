@@ -43,6 +43,8 @@ class MoonBloggerViewModelFactory(
             modelClass.isAssignableFrom(PostEditorViewModel::class.java) ->
                 PostEditorViewModel(
                     repository = container.postRepository,
+                    mediaRepository = container.mediaRepository,
+                    photoSourceProvider = container.photoSourceProvider,
                     postId = (savedStateHandle.get<Long>("postId") as Long?)?.takeIf { it >= 0 },
                 )
 

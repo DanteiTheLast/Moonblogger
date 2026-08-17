@@ -161,17 +161,27 @@ qué alternativas se consideraron.
   (timeout 90 s + retry) para absorber el cold start. Región se elige al crear
   el blueprint (recomendada: cercana a Supabase `ca-central-1`).
 
-## D13 — Media: Supabase Storage (preparación, 12/08/2026)
+## D13 — Media: Supabase Storage (Etapa 1, 12/08/2026; actualizada 16/08/2026)
 
-- **Decisión:** los archivos de media (imágenes, video futuro) se guardarán en **Supabase Storage**, nunca en el filesystem efímero de Render. Metadatos en PostgreSQL. La API emite **signed URLs** (delegación); no hace proxy de bytes (un proxy bloquearía el único worker de gunicorn en subidas grandes de video).
+- **Decisión:** imágenes y vídeo MP4 se guardan en **Supabase Storage**, nunca
+  en el filesystem efímero de Render. Metadatos y outbox de limpieza viven en
+  PostgreSQL. La API emite signed upload URLs; no hace proxy de bytes.
 - **Por qué:** Render Free tiene filesystem efímero (se pierde en cada deploy/spin-up) y un solo worker; hacer proxy de archivos grandes agotaría el worker y excedería memoria/tiempo. Supabase Storage es nativo, gratis en plan free (1 GB), y signed URLs delegan la transferencia al cliente directamente contra el storage.
 - **Límites free documentados:**
   - Cuota total: **1 GB** (proyecto Supabase).
   - Tamaño máximo por archivo: **50 MB** (video grande imposible en free).
   - Egress: **5 GB/mes** (plan Supabase Free) + 5 GB/mes (plan Vercel Hobby) = 10 GB/mes combinado aprox.
-- **Implementación (preparación v1):**
-  - Comentario en `settings.py` junto a `STORAGES["default"]` aclarando que media usará Supabase Storage cuando existan FileFields.
-  - No se definen `MEDIA_ROOT`/`MEDIA_URL` todavía (configuración muerta sin FileFields).
-  - Cuando se añadan FileFields: `django-storages` + `storages.backends.s3boto3.S3Boto3Storage` apuntando a S3-compatible de Supabase, o cliente `supabase-py` para signed URLs.
+- **Implementación Etapa 1:** bucket privado para borradores, bucket público
+  para assets activos publicados, claves UUID inmutables y copia privada→pública
+  antes de publicar. La retirada encola la eliminación pública; su efecto puede
+  retrasarse por caché CDN. El comando `cleanup_media_storage` reprocesa la cola
+  y limpia intents vencidos.
+- **Tradeoff operativo:** la promoción sigue siendo síncrona para mantener el
+  contrato de publicación (si Storage falla, no se publica). La publicación de
+  un post lista media sin `select_for_update` antes de copiar; el cambio de
+  layout sí conserva su bloqueo para mantener posiciones/portada atómicas y por
+  tanto puede esperar Storage. Copias parciales se encolan en el outbox para
+  reconciliación mediante `cleanup_media_storage`; una futura cola asíncrona
+  puede eliminar esta latencia si el volumen lo exige.
 - **Alternativas:** filesystem local (no persiste en Render), Cloudflare R2 (requiere cuenta separada, añade complejidad), proxy en API (bloquea worker).
 - **Tradeoffs:** 50 MB/archivo y 1 GB total limitan a imágenes y video muy corto; video serio requerirá plan pago o R2.

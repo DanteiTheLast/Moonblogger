@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError, getPublishedPostBySlug, getPublishedPosts } from "@/lib/api";
+import MediaCarousel from "@/components/MediaCarousel";
 import { formatDate } from "@/lib/format";
 import styles from "./page.module.css";
 
@@ -67,6 +68,12 @@ export default async function PostPage({ params }: PostPageProps) {
           {formatDate(date)}
         </time>
       </header>
+      {post.media.length > 0 ? (
+        <MediaCarousel
+          media={post.media}
+          transition={post.carousel_transition}
+        />
+      ) : null}
       {/* Contenido en texto plano: se respetan los saltos de línea (pre-wrap). */}
       <div className={styles.content}>{post.content}</div>
       <Link href="/" className={styles.back}>

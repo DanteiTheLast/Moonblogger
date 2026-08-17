@@ -26,8 +26,10 @@ visitante leer las publicaciones que Moon haya publicado.
 
 ## Fuera de alcance de la v1
 
-Comentarios, likes, categorías, social login, imágenes en publicaciones,
-multi-usuario, edición desde la web.
+Comentarios, likes, categorías, social login, multi-usuario, edición desde la
+web, transcodificación de vídeo y canciones. La multimedia de posts (carga
+directa a Storage, imágenes/vídeos y carrusel) se añadió de forma acotada en la
+Etapa 1 de multimedia.
 
 ## Estética
 

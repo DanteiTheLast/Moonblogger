@@ -21,6 +21,7 @@ Render Free ──► Django REST API (gunicorn + WhiteNoise, Dockerfile)
    │                        │
    │ webhook (on_commit)    ▼
    │──────────────────────► Supabase Free ──► PostgreSQL (session pooler)
+   │                         └── Storage (buckets privado/público)
    │           POST /api/revalidate
    ▼
 Vercel Hobby (ISR + revalidateTag)
@@ -36,7 +37,8 @@ Vercel Hobby (ISR + revalidateTag)
   `sslmode=require`; sin backups automáticos → `scripts/backup.sh`.
 - Web: **Vercel Hobby**, **ISR (Incremental Static Regeneration)** con `revalidate = 3600` y `tags: ['posts']`. Invalidación bajo demanda vía webhook `POST /api/revalidate` (firmado con `REVALIDATE_SECRET`). El rebuild vía Deploy Hook ya no es necesario para actualizar contenido; solo para cambios de código.
 - Android: APK release firmado de instalación directa; keystore local.
-- Media (futuro): **Supabase Storage** con signed URLs (no proxy en API). Ver D13.
+- Media: **Supabase Storage** con signed upload URLs (no proxy en API), claves
+  privadas en borradores y promoción a bucket público al publicar. Ver D13.
 - Detalles operativos: [docs/deployment.md](deployment.md).
 
 ## Reglas generales

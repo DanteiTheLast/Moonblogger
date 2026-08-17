@@ -4,6 +4,9 @@ import android.content.Context
 import com.moonblogger.app.BuildConfig
 import com.moonblogger.app.data.auth.AuthRefresher
 import com.moonblogger.app.data.auth.SessionManager
+import com.moonblogger.app.data.media.MediaRepository
+import com.moonblogger.app.data.media.PhotoSourceProvider
+import com.moonblogger.app.data.media.SignedUrlUploader
 import com.moonblogger.app.data.remote.AuthApi
 import com.moonblogger.app.data.remote.PostsApi
 import com.moonblogger.app.data.repository.AuthRepository
@@ -75,6 +78,14 @@ class AppContainer(context: Context) {
         .maybeAddLogging() // solo debug (ver NetworkLogging.kt)
         .build()
 
+    // Este cliente se usa exclusivamente para PUT a URLs firmadas de Storage.
+    // Deliberadamente no hereda AuthInterceptor, TokenAuthenticator ni logging.
+    private val signedUploadOkHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(90, TimeUnit.SECONDS)
+        .build()
+
     private val apiRetrofit: Retrofit = Retrofit.Builder()
         .baseUrl(BuildConfig.API_BASE_URL)
         .client(authedOkHttpClient)
@@ -86,6 +97,8 @@ class AppContainer(context: Context) {
     // --- Repositorios ---
     val authRepository: AuthRepository = AuthRepository(authApi)
     val postRepository: PostRepository = PostRepository(postsApi)
+    val mediaRepository: MediaRepository = MediaRepository(postsApi, SignedUrlUploader(signedUploadOkHttpClient))
+    val photoSourceProvider: PhotoSourceProvider = PhotoSourceProvider(appContext.contentResolver)
 
     val viewModelFactory: MoonBloggerViewModelFactory = MoonBloggerViewModelFactory(this)
 }

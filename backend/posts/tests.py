@@ -1,12 +1,20 @@
 from datetime import timedelta
 import hashlib
+import io
+import json
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.management import call_command
+from django.test import override_settings
+from django.utils import timezone
+from urllib.error import HTTPError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Post
+from .models import Post, PostMedia, StorageDeletionTask
+from .storage import ObjectInfo, StorageError, StorageObjectNotFound, SupabaseStorage
 from . import signals
 
 
@@ -295,3 +303,384 @@ class WebhookSignalTests(APITestCase):
             hashlib.sha256(secret.encode("utf-8")).hexdigest(),
         )
         thread.return_value.start.assert_called_once()
+
+
+class FakeStorage:
+    private_bucket = "private"
+    public_bucket = "public"
+
+    def __init__(self):
+        self.info = {}
+        self.promoted = []
+        self.deleted = []
+        self.intents = []
+
+    def create_upload_url(self, key, ttl):
+        self.intents.append((key, ttl))
+        return f"https://storage.test/upload/{key}"
+
+    def get_object_info(self, bucket, key):
+        return self.info[(bucket, key)]
+
+    def promote(self, key):
+        self.promoted.append(key)
+
+    def delete(self, bucket, key):
+        self.deleted.append((bucket, key))
+
+
+class FakeHTTPResponse:
+    def __init__(self, body=b"", headers=None):
+        self.body = body
+        self.headers = headers or {}
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class SupabaseStorageAdapterTests(APITestCase):
+    def setUp(self):
+        self.storage = SupabaseStorage("https://project.test", "not-a-real-secret", "private", "public")
+
+    @patch("posts.storage.urlopen")
+    def test_signed_upload_accepts_current_url_response(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse(json.dumps({"url": "https://upload.test/signed"}).encode())
+        self.assertEqual(self.storage.create_upload_url("posts/a/asset", 60), "https://upload.test/signed")
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertIn("/object/upload/sign/private/posts/a/asset", request.full_url)
+        self.assertNotIn("not-a-real-secret", request.full_url)
+
+    @patch("posts.storage.urlopen")
+    def test_object_info_uses_head_headers(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse(headers={"Content-Length": "123", "Content-Type": "image/jpeg"})
+        self.assertEqual(self.storage.get_object_info("private", "posts/a/asset"), ObjectInfo(123, "image/jpeg"))
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_method(), "HEAD")
+        self.assertIn("/object/info/private/posts/a/asset", request.full_url)
+
+    @patch("posts.storage.urlopen")
+    def test_delete_uses_documented_endpoint_and_404_is_idempotent(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse()
+        self.storage.delete("public", "posts/a/asset")
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_method(), "DELETE")
+        self.assertIn("/object/public/posts/a/asset", request.full_url)
+        urlopen_mock.side_effect = HTTPError("https://project.test", 404, "missing", {}, io.BytesIO())
+        self.storage.delete("public", "posts/a/asset")
+
+
+@override_settings(
+    MEDIA_STORAGE_URL="https://storage.test",
+    MEDIA_STORAGE_SERVICE_ROLE_KEY="not-a-real-secret",
+    MEDIA_STORAGE_PRIVATE_BUCKET="private",
+    MEDIA_STORAGE_PUBLIC_BUCKET="public",
+)
+class MediaAPITests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("moon-media", password="pass1234")
+        self.other = User.objects.create_user("other-media", password="pass1234")
+        self.client.force_authenticate(self.user)
+        self.post = create_post(self.user, "Con media")
+        self.storage = FakeStorage()
+
+    def storage_patches(self):
+        return patch("posts.views.get_storage", return_value=self.storage), patch(
+            "posts.services.get_storage", return_value=self.storage
+        )
+
+    def ready_media(self, **kwargs):
+        defaults = {
+            "post": self.post,
+            "kind": PostMedia.Kind.IMAGE,
+            "state": PostMedia.State.READY,
+            "mime_type": "image/jpeg",
+            "size_bytes": 100,
+            "private_object_key": "posts/1/example/asset",
+            "ready_at": timezone.now(),
+        }
+        defaults.update(kwargs)
+        return PostMedia.objects.create(**defaults)
+
+    def test_previous_post_payload_remains_accepted(self):
+        response = self.client.post("/api/v1/posts/", {"title": "Compat", "content": "texto"})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["carousel_transition"], "slide")
+
+    def test_media_routes_hide_other_owner(self):
+        other_post = create_post(self.other, "Ajeno")
+        response = self.client.post(
+            f"/api/v1/posts/{other_post.id}/media/upload-intents/",
+            {"kind": "image", "mime_type": "image/jpeg", "size_bytes": 20},
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_upload_intent_validates_limits_and_creates_uuid_key(self):
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+                {"kind": "image", "mime_type": "image/png", "size_bytes": 123, "width": 10, "height": 20},
+            )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        media = PostMedia.objects.get(pk=response.data["media_id"])
+        self.assertEqual(media.state, PostMedia.State.PENDING)
+        self.assertIn(str(media.id), media.private_object_key)
+        self.assertNotIn("service", response.data["upload_url"])
+        too_big = self.client.post(
+            f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+            {"kind": "image", "mime_type": "image/jpeg", "size_bytes": settings.MEDIA_MAX_IMAGE_BYTES + 1},
+        )
+        self.assertEqual(too_big.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_intent_enforces_ten_elements_and_reports_unconfigured_storage(self):
+        for number in range(10):
+            self.ready_media(private_object_key=f"asset-{number}")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            limited = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+                {"kind": "image", "mime_type": "image/jpeg", "size_bytes": 1},
+            )
+        self.assertEqual(limited.status_code, status.HTTP_400_BAD_REQUEST)
+        with patch("posts.views.get_storage", side_effect=StorageError("sin configurar")):
+            unavailable = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+                {"kind": "image", "mime_type": "image/jpeg", "size_bytes": 1},
+            )
+        self.assertEqual(unavailable.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    def test_video_requires_poster_and_respects_video_limit(self):
+        invalid = self.client.post(
+            f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+            {"kind": "video", "mime_type": "video/mp4", "size_bytes": 10, "duration_seconds": 10},
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        self.ready_media(kind="video", private_poster_key="poster-one")
+        self.ready_media(kind="video", private_object_key="two", private_poster_key="poster-two")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            limited = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+                {
+                    "kind": "video", "mime_type": "video/mp4", "size_bytes": 10,
+                    "duration_seconds": 10, "poster_mime_type": "image/jpeg", "poster_size_bytes": 10,
+                },
+            )
+        self.assertEqual(limited.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_complete_checks_remote_metadata(self):
+        media = self.ready_media(state=PostMedia.State.PENDING, ready_at=None, upload_expires_at=timezone.now() + timedelta(minutes=2))
+        self.storage.info[("private", media.private_object_key)] = ObjectInfo(100, "image/jpeg")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(media.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        media.refresh_from_db()
+        self.assertEqual(media.state, PostMedia.State.READY)
+
+    def test_complete_failure_states_are_persisted(self):
+        expired = self.ready_media(
+            state=PostMedia.State.PENDING, ready_at=None,
+            upload_expires_at=timezone.now() - timedelta(seconds=1), private_object_key="expired",
+        )
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(expired.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        expired.refresh_from_db()
+        self.assertEqual(expired.state, PostMedia.State.FAILED)
+
+        absent = self.ready_media(
+            state=PostMedia.State.PENDING, ready_at=None,
+            upload_expires_at=timezone.now() + timedelta(minutes=1), private_object_key="absent",
+        )
+        with patch("posts.views.get_storage", return_value=self.storage), patch.object(
+            self.storage, "get_object_info", side_effect=StorageObjectNotFound("missing")
+        ):
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(absent.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        absent.refresh_from_db()
+        self.assertEqual(absent.state, PostMedia.State.FAILED)
+
+        invalid = self.ready_media(
+            state=PostMedia.State.PENDING, ready_at=None,
+            upload_expires_at=timezone.now() + timedelta(minutes=1), private_object_key="invalid",
+        )
+        self.storage.info[("private", "invalid")] = ObjectInfo(99, "image/jpeg")
+        with patch("posts.views.get_storage", return_value=self.storage):
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(invalid.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        invalid.refresh_from_db()
+        self.assertEqual(invalid.state, PostMedia.State.FAILED)
+
+    def test_complete_validates_poster_exactly(self):
+        media = self.ready_media(
+            kind=PostMedia.Kind.VIDEO, state=PostMedia.State.PENDING, ready_at=None,
+            private_object_key="video", private_poster_key="poster", poster_mime_type="image/jpeg",
+            poster_size_bytes=30, upload_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        self.storage.info[("private", "video")] = ObjectInfo(100, "image/jpeg")
+        # Wrong media MIME for the asset makes the completion invalid too; use a valid MP4 asset.
+        media.mime_type = "video/mp4"
+        media.save(update_fields=["mime_type"])
+        self.storage.info[("private", "video")] = ObjectInfo(100, "video/mp4")
+        self.storage.info[("private", "poster")] = ObjectInfo(31, "image/jpeg")
+        with patch("posts.views.get_storage", return_value=self.storage):
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/complete/", {"media_id": str(media.id)}
+            )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        media.refresh_from_db()
+        self.assertEqual(media.state, PostMedia.State.FAILED)
+
+    def test_layout_is_atomic_and_requires_ready_cover_transition(self):
+        first = self.ready_media()
+        second = self.ready_media(private_object_key="second")
+        response = self.client.put(
+            f"/api/v1/posts/{self.post.id}/media/layout/",
+            {"items": [{"id": str(first.id), "position": 0, "is_cover": True}, {"id": str(second.id), "position": 1, "is_cover": False}], "carousel_transition": "fade"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.carousel_transition, "fade")
+        first.refresh_from_db()
+        self.assertTrue(first.is_cover)
+        pending = self.ready_media(state=PostMedia.State.PENDING, private_object_key="pending")
+        invalid = self.client.put(
+            f"/api/v1/posts/{self.post.id}/media/layout/",
+            {"items": [{"id": str(pending.id), "position": 0, "is_cover": True}]}, format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        first.refresh_from_db()
+        self.assertEqual(first.position, 0)  # failed layout did not replace it
+
+    def test_publish_promotes_active_assets_and_failure_keeps_draft(self):
+        media = self.ready_media(position=0, is_cover=True)
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            response = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.storage.promoted, [media.private_object_key])
+        media.refresh_from_db()
+        self.assertEqual(media.public_object_key, media.private_object_key)
+        failed_post = create_post(self.user, "Falla")
+        self.ready_media(post=failed_post, position=0, is_cover=True, private_object_key="will-fail")
+        with patch("posts.services.get_storage", side_effect=StorageError("down")):
+            response = self.client.patch(f"/api/v1/posts/{failed_post.id}/", {"status": "published"})
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        failed_post.refresh_from_db()
+        self.assertEqual(failed_post.status, Post.Status.DRAFT)
+
+    def test_public_visibility_and_isr_for_visible_metadata_change(self):
+        media = self.ready_media(position=0, is_cover=True, public_object_key="public/asset")
+        self.post.status = Post.Status.PUBLISHED
+        self.post.save()
+        with patch("posts.signals._send_webhook") as webhook:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.patch(
+                    f"/api/v1/posts/{self.post.id}/media/{media.id}/", {"alt_text": "luna"}
+                )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        webhook.assert_called_once_with(Post.Status.PUBLISHED, Post.Status.PUBLISHED)
+        public = self.client.get(f"/api/v1/public/posts/{self.post.slug}/")
+        self.assertEqual(public.status_code, status.HTTP_200_OK)
+        self.assertEqual(public.data["media_count"], 1)
+        self.assertEqual(public.data["media"][0]["url"], "https://storage.test/storage/v1/object/public/public/public/asset")
+        self.assertNotIn("private_object_key", public.data["media"][0])
+        private = self.client.get(f"/api/v1/posts/{self.post.id}/")
+        self.assertNotIn("private_object_key", private.data["media"][0])
+        self.assertNotIn("private_poster_key", private.data["media"][0])
+        public_list = self.client.get("/api/v1/public/posts/")
+        self.assertNotIn("media", public_list.data["results"][0])
+
+    def test_cleanup_removes_expired_pending_intent(self):
+        expired = self.ready_media(
+            state=PostMedia.State.PENDING,
+            ready_at=None,
+            private_object_key="expired/asset",
+            upload_expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        with patch(
+            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
+        ), patch("posts.services.get_storage", return_value=self.storage):
+            call_command("cleanup_media_storage")
+        self.assertFalse(PostMedia.objects.filter(pk=expired.pk).exists())
+        self.assertIn(("private", "expired/asset"), self.storage.deleted)
+
+    def test_delete_enqueues_outbox_and_cleanup_is_idempotent(self):
+        media = self.ready_media(private_object_key="private/asset", public_object_key="public/asset")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage, patch(
+            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
+        ):
+            response = self.client.delete(f"/api/v1/posts/{self.post.id}/media/{media.id}/")
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+            self.assertEqual(StorageDeletionTask.objects.count(), 2)
+            call_command("cleanup_media_storage")
+            call_command("cleanup_media_storage")
+        self.assertEqual(StorageDeletionTask.objects.filter(completed_at__isnull=False).count(), 2)
+        self.assertEqual(len(self.storage.deleted), 2)
+
+    def test_cleanup_treats_missing_object_as_success_and_outbox_is_unique(self):
+        task = StorageDeletionTask.objects.create(bucket="public", object_key="gone")
+        self.assertEqual(
+            StorageDeletionTask.objects.get_or_create(bucket="public", object_key="gone")[1], False
+        )
+        with patch(
+            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
+        ), patch.object(self.storage, "delete", side_effect=StorageObjectNotFound("gone")):
+            call_command("cleanup_media_storage")
+        task.refresh_from_db()
+        self.assertIsNotNone(task.completed_at)
+        from .services import enqueue_storage_deletion
+
+        enqueue_storage_deletion("public", "gone")
+        task.refresh_from_db()
+        self.assertIsNone(task.completed_at)
+
+    def test_unpublish_and_layout_removal_withdraw_public_objects(self):
+        current = self.ready_media(
+            position=0, is_cover=True, private_object_key="old-private", public_object_key="old-public",
+            private_poster_key="old-poster-private", public_poster_key="old-poster-public",
+        )
+        self.post.status = Post.Status.PUBLISHED
+        self.post.save()
+        response = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "draft"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        current.refresh_from_db()
+        self.assertIsNone(current.public_object_key)
+        self.assertEqual(StorageDeletionTask.objects.filter(bucket="public").count(), 2)
+
+        self.post.status = Post.Status.PUBLISHED
+        self.post.save()
+        current.public_object_key = "old-public-again"
+        current.public_poster_key = "old-poster-public-again"
+        current.save()
+        replacement = self.ready_media(private_object_key="new-private")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            response = self.client.put(
+                f"/api/v1/posts/{self.post.id}/media/layout/",
+                {"items": [{"id": str(replacement.id), "position": 0, "is_cover": True}]}, format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        current.refresh_from_db()
+        replacement.refresh_from_db()
+        self.assertIsNone(current.public_object_key)
+        self.assertEqual(replacement.public_object_key, "new-private")

@@ -6,7 +6,7 @@ import {
   getPublishedPostBySlug,
   getPublishedPosts,
 } from "./api";
-import type { Post, PostListResponse } from "./types";
+import type { Post, PostListItem, PostListResponse } from "./types";
 
 const MOCK_POST: Post = {
   id: 1,
@@ -17,6 +17,14 @@ const MOCK_POST: Post = {
   created_at: "2026-08-12T00:00:00Z",
   updated_at: "2026-08-12T00:00:00Z",
   published_at: "2026-08-12T00:00:00Z",
+  carousel_transition: "slide",
+  cover: null,
+  media_count: 0,
+  media: [],
+};
+
+const MOCK_LIST_POST: PostListItem = {
+  ...MOCK_POST,
 };
 
 function mockFetch(status: number, body: unknown): ReturnType<typeof vi.fn> {
@@ -75,14 +83,14 @@ describe("getPublishedPosts", () => {
       count: 1,
       next: null,
       previous: null,
-      results: [MOCK_POST],
+      results: [MOCK_LIST_POST],
     };
     const fetchMock = mockFetch(200, payload);
     vi.stubGlobal("fetch", fetchMock);
 
     const posts = await getPublishedPosts();
 
-    expect(posts).toEqual([MOCK_POST]);
+    expect(posts).toEqual([MOCK_LIST_POST]);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api.test/api/v1/public/posts/",
       expect.objectContaining({

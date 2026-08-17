@@ -36,3 +36,14 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
+      # Supabase Storage: se define exclusivamente en el dashboard de Render.
+      - key: SUPABASE_STORAGE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_PRIVATE_BUCKET
+        sync: false
+      - key: SUPABASE_STORAGE_PUBLIC_BUCKET
+        sync: false
+      - key: MEDIA_INTENT_TTL_SECONDS
+        sync: false

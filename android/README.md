@@ -102,3 +102,8 @@ El keystore (por defecto `android/moonblogger-release.jks`) es la
   llamada de refresh concurrente. Aceptable para una app de un solo usuario.
 - **Sin endpoint de logout:** el cierre de sesión es solo local (borrar
   tokens). El refresh queda invalidado en el servidor por rotación/expiración.
+- **FOTOS / futura etapa vídeo:** las cargas directas de fotos se ejecutan en
+  primer plano y no se reanudan tras cerrar o matar la app. No se persisten
+  URIs, intents ni URLs firmadas por seguridad; la reanudación durable queda
+  explícitamente pendiente para la etapa de vídeo (evaluar WorkManager/cola
+  persistente entonces).

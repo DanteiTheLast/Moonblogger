@@ -143,9 +143,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
-        # Media (futuro): usará Supabase Storage (S3-compatible) con signed URLs.
-        # No definir MEDIA_ROOT/MEDIA_URL hasta que existan FileFields reales.
-        # Ver decisión D13 en docs/decisions.md.
+        # Post media already uses the Supabase REST adapter directly, never
+        # FileField or Django's default storage. Do not add MEDIA_ROOT/MEDIA_URL.
     },
     "staticfiles": {
         # Compresión + manifest con hashes para servirlos vía WhiteNoise.
@@ -175,3 +174,27 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
+
+# Supabase Storage is deliberately kept outside Django's FileField storage:
+# clients upload directly with short-lived signed URLs and Django only stores
+# metadata/object keys. Leaving these unset keeps post CRUD available; media
+# endpoints then return a clear 503 instead of falling back to local files.
+MEDIA_STORAGE_URL = os.environ.get(
+    "SUPABASE_STORAGE_URL", os.environ.get("SUPABASE_URL", "")
+).rstrip("/")
+MEDIA_STORAGE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+MEDIA_STORAGE_PRIVATE_BUCKET = os.environ.get("SUPABASE_STORAGE_PRIVATE_BUCKET", "")
+MEDIA_STORAGE_PUBLIC_BUCKET = os.environ.get("SUPABASE_STORAGE_PUBLIC_BUCKET", "")
+# Internal deadline for complete/cleanup. MEDIA_UPLOAD_TTL_SECONDS is retained
+# as a backwards-compatible environment-variable alias; it does not revoke a
+# signed URL already issued by Supabase.
+MEDIA_INTENT_TTL_SECONDS = int(
+    os.environ.get("MEDIA_INTENT_TTL_SECONDS", os.environ.get("MEDIA_UPLOAD_TTL_SECONDS", "900"))
+)
+MEDIA_MAX_ITEMS_PER_POST = int(os.environ.get("MEDIA_MAX_ITEMS_PER_POST", "10"))
+MEDIA_MAX_VIDEOS_PER_POST = int(os.environ.get("MEDIA_MAX_VIDEOS_PER_POST", "2"))
+MEDIA_MAX_IMAGE_BYTES = int(os.environ.get("MEDIA_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+MEDIA_MAX_VIDEO_BYTES = int(os.environ.get("MEDIA_MAX_VIDEO_BYTES", str(40 * 1024 * 1024)))
+MEDIA_MAX_VIDEO_DURATION_SECONDS = int(
+    os.environ.get("MEDIA_MAX_VIDEO_DURATION_SECONDS", "120")
+)

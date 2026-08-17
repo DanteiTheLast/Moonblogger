@@ -16,6 +16,7 @@
 | `created_at` | timestamptz | NOT NULL | `auto_now_add`. Siempre UTC. |
 | `updated_at` | timestamptz | NOT NULL | `auto_now`. Siempre UTC. |
 | `published_at` | timestamptz | NULL | Se fija al publicar, se limpia al volver a `draft`. |
+| `carousel_transition` | varchar | NOT NULL, DEFAULT `slide` | `slide`, `fade`, `bubble` o `none`. |
 
 ## Índices
 
@@ -34,6 +35,24 @@
 
 - **Borrado físico** (`DELETE`): los backups (`pg_dump`) cubren la recuperación.
 - Validación de no-vacío en el backend (serializer); `NOT NULL` en la BD.
+
+## Multimedia (Etapa 1)
+
+`Post.carousel_transition` es `slide` (default), `fade`, `bubble` o `none`; la
+migración conserva los posts existentes con `slide` y sin media.
+
+`PostMedia` usa UUID como PK y FK a `Post`. Conserva únicamente metadatos y
+claves de objeto, nunca bytes ni credenciales: tipo (`image`/`video`), estado
+(`pending`/`ready`/`failed`), posición opcional, portada, claves privada/pública
+y de póster, MIME/tamaño de asset y póster, dimensiones, duración declarada, texto alternativo,
+caption y timestamps de vencimiento/listo. Hay unicidad de posición activa por
+post, una sola portada por post e índices para layout y limpieza de intents.
+
+`StorageDeletionTask` es una cola persistente de borrado (`bucket`, clave,
+intentos, error y finalización). Al borrar media o posts se encola su limpieza;
+`manage.py cleanup_media_storage` borra intents vencidos y reprocesa las tareas
+pendientes de manera idempotente. No requiere scheduler externo, aunque en
+producción debe invocarse periódicamente por el mecanismo operativo elegido.
 
 ## Tablas de la blacklist de JWT (SimpleJWT)
 

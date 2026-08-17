@@ -1,6 +1,7 @@
 package com.moonblogger.app.data.repository
 
 import com.moonblogger.app.data.model.PostStatus
+import com.moonblogger.app.data.model.CarouselTransition
 import com.moonblogger.app.data.remote.PostsApi
 import com.moonblogger.app.testutil.SAMPLE_POST_JSON
 import com.moonblogger.app.testutil.jsonResponse
@@ -68,6 +69,31 @@ class PostRepositoryTest {
         val recorded = server.takeRequest()
         assertEquals("GET", recorded.method)
         assertEquals("/api/v1/posts/1/", recorded.url.encodedPath)
+    }
+
+    @Test
+    fun `getPost parses private media and carousel transition`() = runBlocking {
+        server.enqueue(
+            jsonResponse(
+                200,
+                """{
+                    "id":1,"slug":"con-fotos","title":"Con fotos","content":"Hola",
+                    "status":"draft","created_at":"2026-08-11T12:00:00Z",
+                    "updated_at":"2026-08-11T12:30:00Z","published_at":null,
+                    "carousel_transition":"fade",
+                    "media":[{"id":"a5d5488d-60f9-4b0c-a2ae-7e9b9f8e59a9","kind":"image",
+                    "state":"ready","position":0,"is_cover":true,"mime_type":"image/jpeg",
+                    "size_bytes":12,"width":3,"height":4,"alt_text":"Luna","caption":"Noche"}]
+                }""",
+            ),
+        )
+
+        val post = repository.getPost(1L).getOrThrow()
+
+        assertEquals(CarouselTransition.FADE, post.carousel_transition)
+        assertEquals(1, post.media.size)
+        assertEquals("Luna", post.media.single().alt_text)
+        assertTrue(post.media.single().is_cover)
     }
 
     @Test

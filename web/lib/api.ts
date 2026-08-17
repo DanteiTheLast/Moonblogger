@@ -1,4 +1,4 @@
-import type { Post, PostListResponse } from "./types";
+import type { Post, PostListItem, PostListResponse } from "./types";
 
 /**
  * Cliente de solo lectura de la API pública de Django.
@@ -95,7 +95,7 @@ async function request<T>(path: string): Promise<T> {
 }
 
 /** Listado público (solo publicadas). En v1 se consume la primera página. */
-export async function getPublishedPosts(): Promise<Post[]> {
+export async function getPublishedPosts(): Promise<PostListItem[]> {
   const data = await request<PostListResponse>("/public/posts/");
   return data.results;
 }

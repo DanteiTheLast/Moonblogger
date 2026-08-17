@@ -6,9 +6,10 @@ import urllib.request
 
 from django.db import transaction
 from django.dispatch import receiver
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
 
-from .models import Post
+from .models import Post, PostMedia
+from .services import enqueue_media_deletions
 
 
 def _send_webhook(old_status, new_status):
@@ -115,3 +116,9 @@ def _on_post_delete(sender, instance, **kwargs):
     transaction.on_commit(
         lambda: _send_webhook(instance.status, Post.Status.DRAFT)
     )
+
+
+@receiver(pre_delete, sender=PostMedia)
+def _queue_deleted_media_objects(sender, instance, **kwargs):
+    """Persist cleanup work in the same DB transaction as the deletion."""
+    enqueue_media_deletions(instance)

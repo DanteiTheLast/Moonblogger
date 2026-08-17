@@ -169,6 +169,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.coil.compose)
 
     // Almacenamiento cifrado de tokens (EncryptedSharedPreferences, 1.1.0).
     // NOTA: la librería está deprecada upstream (ver android/README.md, D7).

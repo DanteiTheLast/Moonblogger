@@ -1,6 +1,7 @@
 package com.moonblogger.app.data.repository
 
 import com.moonblogger.app.data.model.Post
+import com.moonblogger.app.data.model.CarouselTransition
 import com.moonblogger.app.data.model.PostRequest
 import com.moonblogger.app.data.model.PostStatus
 import com.moonblogger.app.data.remote.PostsApi
@@ -26,16 +27,18 @@ class PostRepository(private val postsApi: PostsApi) {
         title: String,
         content: String,
         status: PostStatus,
+        transition: CarouselTransition = CarouselTransition.SLIDE,
     ): Result<Post> =
-        safeApiCall { postsApi.createPost(PostRequest(title, content, status)) }
+        safeApiCall { postsApi.createPost(PostRequest(title, content, status, transition)) }
 
     suspend fun updatePost(
         id: Long,
         title: String,
         content: String,
         status: PostStatus,
+        transition: CarouselTransition = CarouselTransition.SLIDE,
     ): Result<Post> =
-        safeApiCall { postsApi.updatePost(id, PostRequest(title, content, status)) }
+        safeApiCall { postsApi.updatePost(id, PostRequest(title, content, status, transition)) }
 
     suspend fun deletePost(id: Long): Result<Unit> =
         safeApiCall { postsApi.deletePost(id) }
