@@ -20,6 +20,8 @@ body {
   line-height: 1.6;
 }
 
+::selection { background: var(--color-pink); color: var(--color-text); }
+
 h1,
 h2,
 h3 {
@@ -55,4 +57,13 @@ a:hover {
 button,
 a {
   touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

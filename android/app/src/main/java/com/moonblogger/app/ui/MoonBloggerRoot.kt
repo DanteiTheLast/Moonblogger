@@ -22,6 +22,7 @@ import com.moonblogger.app.data.auth.SessionState
 import com.moonblogger.app.di.AppContainer
 import com.moonblogger.app.ui.navigation.AuthNavHost
 import com.moonblogger.app.ui.navigation.MainNavHost
+import com.moonblogger.app.ui.components.DecorativeMotif
 
 /**
  * Raíz de la navegación: el flujo mostrado depende del estado de sesión.
@@ -61,6 +62,7 @@ private fun LoadingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            DecorativeMotif()
             Text(
                 text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineMedium,

@@ -8,17 +8,19 @@
 
 :root {
   /* Color */
-  --color-bg: #fdf6f1;
+  --color-bg: #fff7f8;
   --color-surface: #ffffff;
-  --color-surface-alt: #faf0f6;
-  --color-pink: #f5bccf;
-  --color-lavender: #e3d7f4;
-  --color-text: #3d2f35;
-  --color-text-muted: #66525b;
-  --color-primary: #a74367;
-  --color-primary-hover: #8f3a59;
-  --color-border: #f1dfe8;
-  --color-focus: #7c5bbf;
+  --color-surface-alt: #fff0f4;
+  --color-pink: #f2b5c9;
+  --color-lavender: #e6d8f6;
+  --color-text: #392b32;
+  --color-text-muted: #68515b;
+  --color-primary: #a13d65;
+  --color-primary-hover: #7f2d4d;
+  --color-border: #efd5df;
+  --color-focus: #6541a2;
+  --color-success: #286b52;
+  --color-danger: #a53545;
 
   /* Tipografía (variables inyectadas por next/font en <html>) */
   --font-sans: var(--font-nunito), "Nunito", system-ui, -apple-system, sans-serif;
@@ -43,6 +45,9 @@
   /* Sombras mínimas */
   --shadow-sm: 0 1px 2px rgb(61 47 53 / 0.06);
   --shadow-md: 0 4px 14px rgb(61 47 53 / 0.08);
+  --ease-standard: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --duration-fast: 160ms;
+  --duration-normal: 240ms;
 
   /* Contenedor de lectura */
   --container-max: 44rem;

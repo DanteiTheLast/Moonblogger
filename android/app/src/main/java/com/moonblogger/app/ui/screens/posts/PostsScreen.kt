@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moonblogger.app.R
 import com.moonblogger.app.ui.components.PostCard
+import com.moonblogger.app.ui.components.DecorativeMotif
 
 /**
  * Lista de publicaciones (incluye borradores). Pull-to-refresh también
@@ -182,6 +183,7 @@ private fun EmptyState(onNewPost: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        DecorativeMotif()
         Text(
             text = stringResource(R.string.posts_empty),
             style = MaterialTheme.typography.bodyLarge,

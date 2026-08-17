@@ -39,7 +39,7 @@ export default function PostCard({ post }: PostCardProps) {
           />
         ) : (
           <div className={styles.thumbnailFallback}>
-            <span aria-hidden="true">☾</span>
+            <span className={styles.fallbackShape} aria-hidden="true" />
             <span>Sin portada disponible</span>
           </div>
         )}

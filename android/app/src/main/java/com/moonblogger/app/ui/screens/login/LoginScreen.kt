@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +31,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moonblogger.app.R
+import com.moonblogger.app.ui.components.DecorativeMotif
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
@@ -42,6 +46,7 @@ fun LoginScreen(viewModel: LoginViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        DecorativeMotif()
         Text(
             text = stringResource(R.string.login_title),
             style = MaterialTheme.typography.displaySmall,
@@ -77,7 +82,8 @@ fun LoginScreen(viewModel: LoginViewModel) {
             modifier = Modifier.fillMaxWidth(),
         )
 
-        state.error?.let { error ->
+        AnimatedVisibility(visible = state.error != null, enter = fadeIn(), exit = fadeOut()) {
+            val error = state.error ?: return@AnimatedVisibility
             Spacer(Modifier.height(12.dp))
             Text(
                 text = error,
