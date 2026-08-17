@@ -329,6 +329,90 @@ class FakeStorage:
         self.deleted.append((bucket, key))
 
 
+class MediaHousekeepingServiceTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("housekeeping", password="pass1234")
+        self.post = create_post(self.user, "Housekeeping")
+        self.storage = FakeStorage()
+
+    def media(self, **kwargs):
+        defaults = {
+            "post": self.post,
+            "kind": PostMedia.Kind.IMAGE,
+            "mime_type": "image/jpeg",
+            "size_bytes": 1,
+            "private_object_key": "asset",
+        }
+        defaults.update(kwargs)
+        return PostMedia.objects.create(**defaults)
+
+    def test_service_removes_five_expired_intents_and_processes_their_tasks(self):
+        expired = [
+            self.media(
+                state=PostMedia.State.PENDING,
+                private_object_key=f"expired/{number}",
+                upload_expires_at=timezone.now() - timedelta(seconds=1),
+            )
+            for number in range(5)
+        ]
+
+        from .services import run_media_housekeeping
+
+        with patch("posts.services.get_storage", return_value=self.storage):
+            result = run_media_housekeeping()
+
+        self.assertEqual(result.expired_intents, 5)
+        self.assertEqual(result.deleted_objects, 5)
+        self.assertFalse(PostMedia.objects.filter(pk__in=[item.pk for item in expired]).exists())
+        self.assertEqual(StorageDeletionTask.objects.filter(completed_at__isnull=False).count(), 5)
+        self.assertEqual(len(self.storage.deleted), 5)
+
+    def test_service_never_removes_nonexpired_or_ready_media(self):
+        pending = self.media(
+            state=PostMedia.State.PENDING,
+            private_object_key="pending-future",
+            upload_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        failed = self.media(
+            state=PostMedia.State.FAILED,
+            private_object_key="failed-future",
+            upload_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        ready = self.media(
+            state=PostMedia.State.READY,
+            private_object_key="ready-expired",
+            public_object_key="ready-public",
+            ready_at=timezone.now(),
+            upload_expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        from .services import run_media_housekeeping
+
+        with patch("posts.services.get_storage", return_value=self.storage):
+            result = run_media_housekeeping()
+
+        self.assertEqual(result.expired_intents, 0)
+        self.assertEqual(PostMedia.objects.filter(pk__in=[pending.pk, failed.pk, ready.pk]).count(), 3)
+        self.assertFalse(StorageDeletionTask.objects.exists())
+
+
+class MediaCleanupCommandTests(APITestCase):
+    @patch("posts.management.commands.cleanup_media_storage.run_media_housekeeping")
+    def test_command_delegates_to_housekeeping_service_with_requested_limit(self, housekeeping):
+        from .services import MediaHousekeepingResult
+
+        housekeeping.return_value = MediaHousekeepingResult(
+            expired_intents=1,
+            deleted_objects=1,
+        )
+        output = io.StringIO()
+
+        call_command("cleanup_media_storage", "--limit", "5", stdout=output)
+
+        housekeeping.assert_called_once_with(limit=5)
+        self.assertIn("Intents vencidos: 1; objetos eliminados: 1", output.getvalue())
+
+
 class FakeHTTPResponse:
     def __init__(self, body=b"", headers=None):
         self.body = body
@@ -460,6 +544,21 @@ class MediaAPITests(APITestCase):
             {"kind": "image", "mime_type": "image/jpeg", "size_bytes": settings.MEDIA_MAX_IMAGE_BYTES + 1},
         )
         self.assertEqual(too_big.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_intent_continues_when_housekeeping_storage_delete_fails(self):
+        task = StorageDeletionTask.objects.create(bucket="private", object_key="retry-me")
+        with patch("posts.views.get_storage", return_value=self.storage), patch(
+            "posts.services.get_storage", return_value=self.storage
+        ), patch.object(self.storage, "delete", side_effect=StorageError("temporary failure")):
+            response = self.client.post(
+                f"/api/v1/posts/{self.post.id}/media/upload-intents/",
+                {"kind": "image", "mime_type": "image/jpeg", "size_bytes": 1},
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        task.refresh_from_db()
+        self.assertIsNone(task.completed_at)
+        self.assertEqual(task.attempts, 1)
 
     def test_upload_intent_enforces_ten_elements_and_reports_unconfigured_storage(self):
         for number in range(10):
@@ -659,9 +758,7 @@ class MediaAPITests(APITestCase):
             private_object_key="expired/asset",
             upload_expires_at=timezone.now() - timedelta(seconds=1),
         )
-        with patch(
-            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
-        ), patch("posts.services.get_storage", return_value=self.storage):
+        with patch("posts.services.get_storage", return_value=self.storage):
             call_command("cleanup_media_storage")
         self.assertFalse(PostMedia.objects.filter(pk=expired.pk).exists())
         self.assertIn(("private", "expired/asset"), self.storage.deleted)
@@ -669,9 +766,7 @@ class MediaAPITests(APITestCase):
     def test_delete_enqueues_outbox_and_cleanup_is_idempotent(self):
         media = self.ready_media(private_object_key="private/asset", public_object_key="public/asset")
         view_storage, service_storage = self.storage_patches()
-        with view_storage, service_storage, patch(
-            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
-        ):
+        with view_storage, service_storage:
             response = self.client.delete(f"/api/v1/posts/{self.post.id}/media/{media.id}/")
             self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
             self.assertEqual(StorageDeletionTask.objects.count(), 2)
@@ -685,9 +780,9 @@ class MediaAPITests(APITestCase):
         self.assertEqual(
             StorageDeletionTask.objects.get_or_create(bucket="public", object_key="gone")[1], False
         )
-        with patch(
-            "posts.management.commands.cleanup_media_storage.get_storage", return_value=self.storage
-        ), patch.object(self.storage, "delete", side_effect=StorageObjectNotFound("gone")):
+        with patch("posts.services.get_storage", return_value=self.storage), patch.object(
+            self.storage, "delete", side_effect=StorageObjectNotFound("gone")
+        ):
             call_command("cleanup_media_storage")
         task.refresh_from_db()
         self.assertIsNotNone(task.completed_at)

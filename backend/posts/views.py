@@ -27,6 +27,7 @@ from .services import (
     validate_active_layout,
     withdraw_public_media,
     enqueue_storage_deletion,
+    run_media_housekeeping,
 )
 from .storage import StorageError, StorageObjectNotFound, get_storage
 
@@ -139,6 +140,9 @@ class UploadIntentView(PostMediaBaseView):
     def post(self, request, post_id):
         serializer = UploadIntentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Best-effort housekeeping must never turn a usable upload request into
+        # an error; normal signed-URL creation below retains its own 503 policy.
+        run_media_housekeeping()
         try:
             storage = get_storage()
         except StorageError as exc:

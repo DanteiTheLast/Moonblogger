@@ -78,6 +78,10 @@ efímera de Supabase.
   vídeo: MP4 hasta 40 MiB y duración declarada máxima de 120 s. Todo vídeo exige
   un póster de imagen en el intent.
 - Cada intent usa claves inmutables generadas con UUID y sin `upsert`.
+  Antes de crear un intent autenticado válido, la API ejecuta housekeeping
+  acotado (hasta 10 intents vencidos y 10 tareas de borrado). Es interno: no
+  cambia el contrato ni la respuesta; si el borrado remoto falla, la tarea queda
+  pendiente para reintento y no bloquea un intent que pueda obtener su URL.
   `MEDIA_INTENT_TTL_SECONDS` (el alias anterior `MEDIA_UPLOAD_TTL_SECONDS` se
   acepta) es el plazo interno para `complete` y limpieza; no revoca una URL
   firmada que Supabase ya haya emitido y no se transmite como `expiresIn` a

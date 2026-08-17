@@ -1,64 +1,34 @@
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.utils import timezone
 
-from posts.models import PostMedia, StorageDeletionTask
-from posts.storage import StorageError, StorageObjectNotFound, get_storage
+from posts.services import MEDIA_HOUSEKEEPING_BATCH_SIZE, run_media_housekeeping
 
 
 class Command(BaseCommand):
     help = "Elimina intents vencidos y reprocesa la cola persistente de borrado de Storage."
 
-    def handle(self, *args, **options):
-        now = timezone.now()
-        expired = PostMedia.objects.filter(
-            state__in=[PostMedia.State.PENDING, PostMedia.State.FAILED],
-            upload_expires_at__lte=now,
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=MEDIA_HOUSEKEEPING_BATCH_SIZE,
+            help="Máximo de intents vencidos y de tareas de Storage a procesar (default: 10).",
         )
-        expired_count = expired.count()
-        # pre_delete enqueues object cleanup within the same transaction.
-        with transaction.atomic():
-            expired.delete()
 
+    def handle(self, *args, **options):
         try:
-            storage = get_storage()
-        except StorageError as exc:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Se eliminaron {expired_count} intents vencidos; Storage no está configurado: {exc}"
-                )
-            )
-            return
+            result = run_media_housekeeping(limit=options["limit"])
+        except ValueError as exc:
+            raise ValueError("--limit debe ser un entero positivo.") from exc
 
-        completed = 0
-        failed = 0
-        for task_id in StorageDeletionTask.objects.filter(completed_at__isnull=True).values_list("id", flat=True):
-            with transaction.atomic():
-                task = StorageDeletionTask.objects.select_for_update().get(pk=task_id)
-                if task.completed_at:
-                    continue
-                try:
-                    storage.delete(task.bucket, task.object_key)
-                except StorageObjectNotFound:
-                    # A missing object is already in the desired deleted state.
-                    task.attempts += 1
-                    task.last_error = ""
-                    task.completed_at = timezone.now()
-                    task.save(update_fields=["attempts", "last_error", "completed_at"])
-                    completed += 1
-                except StorageError as exc:
-                    task.attempts += 1
-                    task.last_error = str(exc)
-                    task.save(update_fields=["attempts", "last_error"])
-                    failed += 1
-                else:
-                    task.attempts += 1
-                    task.last_error = ""
-                    task.completed_at = timezone.now()
-                    task.save(update_fields=["attempts", "last_error", "completed_at"])
-                    completed += 1
+        message = (
+            f"Intents vencidos: {result.expired_intents}; objetos eliminados: "
+            f"{result.deleted_objects}; reintentos fallidos: {result.failed_deletions}."
+        )
+        if not result.storage_available:
+            self.stdout.write(self.style.WARNING(f"{message} Storage no disponible; tareas conservadas."))
+            return
         self.stdout.write(
             self.style.SUCCESS(
-                f"Intents vencidos: {expired_count}; objetos eliminados: {completed}; reintentos fallidos: {failed}."
+                message
             )
         )

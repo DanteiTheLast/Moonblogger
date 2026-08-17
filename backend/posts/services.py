@@ -1,7 +1,105 @@
+import logging
+from dataclasses import dataclass
+
+from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from .models import Post, PostMedia
-from .storage import StorageError, get_storage
+from .models import Post, PostMedia, StorageDeletionTask
+from .storage import StorageError, StorageObjectNotFound, get_storage
+
+
+logger = logging.getLogger(__name__)
+
+# Bound synchronous work performed before a new upload intent.  This is enough
+# to make progress on a small backlog without making the request unbounded.
+MEDIA_HOUSEKEEPING_BATCH_SIZE = 10
+
+
+@dataclass(frozen=True)
+class MediaHousekeepingResult:
+    expired_intents: int = 0
+    deleted_objects: int = 0
+    failed_deletions: int = 0
+    storage_available: bool = True
+
+
+def run_media_housekeeping(limit=MEDIA_HOUSEKEEPING_BATCH_SIZE):
+    """Remove expired non-ready intents and retry a bounded deletion outbox batch.
+
+    Database cleanup is intentionally completed before contacting Storage.  Each
+    outbox item remains locked while its deletion is attempted, preserving the
+    existing at-most-one concurrent worker semantics without holding a lock for
+    the whole batch.
+    """
+    if limit < 1:
+        raise ValueError("limit must be positive")
+
+    now = timezone.now()
+    with transaction.atomic():
+        expired = list(
+            PostMedia.objects.select_for_update()
+            .filter(
+                state__in=[PostMedia.State.PENDING, PostMedia.State.FAILED],
+                upload_expires_at__lte=now,
+            )
+            .order_by("upload_expires_at", "id")[:limit]
+        )
+        for media in expired:
+            # The pre_delete signal writes durable StorageDeletionTask entries.
+            media.delete()
+
+    try:
+        storage = get_storage()
+    except StorageError:
+        # Do not expose configuration or provider details in request logs.
+        logger.warning("Media housekeeping skipped Storage deletion tasks: Storage unavailable.")
+        return MediaHousekeepingResult(expired_intents=len(expired), storage_available=False)
+
+    completed = 0
+    failed = 0
+    task_ids = list(
+        StorageDeletionTask.objects.filter(completed_at__isnull=True)
+        .order_by("created_at", "id")
+        .values_list("id", flat=True)[:limit]
+    )
+    for task_id in task_ids:
+        with transaction.atomic():
+            try:
+                task = StorageDeletionTask.objects.select_for_update().get(pk=task_id)
+            except StorageDeletionTask.DoesNotExist:
+                continue
+            if task.completed_at:
+                continue
+            try:
+                storage.delete(task.bucket, task.object_key)
+            except StorageObjectNotFound:
+                # A missing object is already in the desired deleted state.
+                task.attempts += 1
+                task.last_error = ""
+                task.completed_at = timezone.now()
+                task.save(update_fields=["attempts", "last_error", "completed_at"])
+                completed += 1
+            except StorageError:
+                task.attempts += 1
+                # Storage adapters may wrap provider errors. Keep diagnostics
+                # useful without risking persistence of provider credentials.
+                task.last_error = "Storage no pudo completar la eliminación."
+                task.save(update_fields=["attempts", "last_error"])
+                failed += 1
+                logger.warning("Media housekeeping could not delete a Storage object; task retained for retry.")
+            else:
+                task.attempts += 1
+                task.last_error = ""
+                task.completed_at = timezone.now()
+                task.save(update_fields=["attempts", "last_error", "completed_at"])
+                completed += 1
+
+    return MediaHousekeepingResult(
+        expired_intents=len(expired),
+        deleted_objects=completed,
+        failed_deletions=failed,
+    )
 
 
 class PromotionFailed(StorageError):

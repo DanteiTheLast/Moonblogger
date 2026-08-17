@@ -104,6 +104,16 @@ El blueprint define las no-secretas y auto-genera la secret key:
 > Los estáticos del admin los sirve WhiteNoise (`collectstatic` se ejecuta en
 > el build de la imagen); no hace falta servidor de estáticos aparte.
 >
+> **Limpieza de media:** Render Free no requiere Shell ni cron para la limpieza
+> habitual. Cada creación autenticada de un intent de carga procesa como máximo
+> 10 intents `pending`/`failed` vencidos y 10 tareas persistentes de borrado.
+> El límite evita añadir latencia no acotada a una petición; un backlog mayor
+> avanza con los siguientes intents. `manage.py cleanup_media_storage --limit N`
+> conserva el wrapper operativo para ejecuciones manuales donde estén
+> disponibles. Si Storage no está disponible, las tareas se conservan para
+> reintento; la creación de la URL de carga sigue requiriendo la configuración
+> normal de Storage.
+>
 > **Migraciones:** se aplican manualmente desde una máquina local con el código
 > (misma convención que la creación inicial; ver [Sección 1](#1-base-de-datos-supabase-free)).
 > El `health/` no consulta la BD: un deploy puede quedar "healthy" con
