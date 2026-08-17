@@ -13,7 +13,7 @@ visitante leer las publicaciones que Moon haya publicado.
 - **Django REST API**: lógica de negocio, autenticación, validación y acceso a
   datos. Única puerta de entrada a la base de datos.
 - **PostgreSQL**: persistencia. Solo accesible desde el backend.
-- **Web** (Next.js, SSG): sitio público de solo lectura con las publicaciones
+- **Web** (Next.js, ISR): sitio público de solo lectura con las publicaciones
   publicadas.
 
 ## Alcance de la primera versión

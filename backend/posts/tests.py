@@ -1,10 +1,13 @@
 from datetime import timedelta
+import hashlib
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import Post
+from . import signals
 
 
 def create_post(author, title, content="Contenido", **kwargs):
@@ -199,3 +202,96 @@ class PublicPostAPITests(APITestCase):
         resp = self.client.get("/api/v1/health/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["status"], "ok")
+
+
+class WebhookSignalTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("moon", password="pass1234")
+
+    @patch("posts.signals._send_webhook")
+    def test_publishing_post_invalidates_public_pages(self, send_webhook):
+        with self.captureOnCommitCallbacks(execute=True):
+            create_post(self.user, title="Publicado", status="published")
+
+        send_webhook.assert_called_once_with(Post.Status.DRAFT, Post.Status.PUBLISHED)
+
+    @patch("posts.signals._send_webhook")
+    def test_unpublishing_post_invalidates_public_pages(self, send_webhook):
+        post = create_post(self.user, title="Publicado", status="published")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            post.status = Post.Status.DRAFT
+            post.save()
+
+        send_webhook.assert_called_once_with(Post.Status.PUBLISHED, Post.Status.DRAFT)
+
+    @patch("posts.signals._send_webhook")
+    def test_editing_published_post_invalidates_public_pages(self, send_webhook):
+        post = create_post(self.user, title="Publicado", status="published")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            post.content = "Contenido actualizado"
+            post.save()
+
+        send_webhook.assert_called_once_with(Post.Status.PUBLISHED, Post.Status.PUBLISHED)
+
+    @patch("posts.signals._send_webhook")
+    def test_deleting_published_post_invalidates_public_pages(self, send_webhook):
+        post = create_post(self.user, title="Publicado", status="published")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            post.delete()
+
+        send_webhook.assert_called_once_with(Post.Status.PUBLISHED, Post.Status.DRAFT)
+
+    @patch("posts.signals.urllib.request.Request")
+    def test_draft_only_changes_do_not_send_webhook(self, request):
+        with patch.dict(
+            "os.environ",
+            {
+                "WEB_REVALIDATE_URL": "https://web.test/api/revalidate",
+                "WEB_REVALIDATE_SECRET": "test-secret",
+            },
+            clear=False,
+        ):
+            signals._send_webhook(Post.Status.DRAFT, Post.Status.DRAFT)
+
+        request.assert_not_called()
+
+    @patch("posts.signals.urllib.request.Request")
+    def test_deleting_draft_does_not_send_webhook(self, request):
+        post = create_post(self.user, title="Borrador")
+        with patch.dict(
+            "os.environ",
+            {
+                "WEB_REVALIDATE_URL": "https://web.test/api/revalidate",
+                "WEB_REVALIDATE_SECRET": "test-secret",
+            },
+            clear=False,
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                post.delete()
+
+        request.assert_not_called()
+
+    @patch("posts.signals.threading.Thread")
+    @patch("posts.signals.urllib.request.Request")
+    def test_webhook_sends_sha256_secret(self, request, thread):
+        secret = "test-secret"
+        with patch.dict(
+            "os.environ",
+            {
+                "WEB_REVALIDATE_URL": "https://web.test/api/revalidate",
+                "WEB_REVALIDATE_SECRET": secret,
+            },
+            clear=False,
+        ):
+            signals._send_webhook(Post.Status.DRAFT, Post.Status.PUBLISHED)
+
+        request.assert_called_once()
+        headers = request.call_args.kwargs["headers"]
+        self.assertEqual(
+            headers["X-Revalidate-Secret"],
+            hashlib.sha256(secret.encode("utf-8")).hexdigest(),
+        )
+        thread.return_value.start.assert_called_once()

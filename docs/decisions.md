@@ -106,6 +106,8 @@ qué alternativas se consideraron.
 
 - **Decisión (11/08/2026):** despliegue en plataformas en sus planes gratuitos,
   aprobado por el usuario:
+  - **Nota histórica:** la parte web de esta decisión (SSG y Deploy Hook) fue
+    sustituida por D2. La configuración vigente usa ISR y webhook.
   - **API (Django + DRF)** → **Koyeb Free** (Dockerfile, gunicorn + WhiteNoise,
     subdominio `{{KOYEB_PUBLIC_DOMAIN}}`, SSL incluido). Escala a 0 tras 1h sin
     tráfico (cold start ~30 s en el siguiente request).

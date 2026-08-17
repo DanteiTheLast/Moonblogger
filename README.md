@@ -1,12 +1,12 @@
 # MoonBlogger
 
 Blog personal de Moon: una app Android para escribir publicaciones y un sitio
-web público y estático para leerlas.
+web público con ISR para leerlas.
 
 ```
 Android (Kotlin) ──┐
                    ├── HTTPS / REST ──► Django REST API ──► PostgreSQL
-Web (Next.js SSG) ─┘
+Web (Next.js ISR) ─┘
 ```
 
 ## Componentes
@@ -15,7 +15,7 @@ Web (Next.js SSG) ─┘
 |---|---|---|---|
 | `android/` | Cliente Android | Kotlin + Jetpack Compose + Retrofit | Login y CRUD de publicaciones (único cliente con escritura) |
 | `backend/` | API | Django + Django REST Framework | Autenticación, lógica de negocio y acceso a datos |
-| `web/` | Sitio web público | Next.js + TypeScript (SSG, 100% estático) | Listado y detalle de publicaciones publicadas |
+| `web/` | Sitio web público | Next.js + TypeScript (ISR) | Listado y detalle de publicaciones publicadas |
 | `docs/` | Documentación | Markdown | Arquitectura, API, base de datos, decisiones y despliegue |
 
 - **API REST**: único contrato entre componentes; ningún cliente accede
@@ -45,7 +45,7 @@ python manage.py migrate
 python manage.py create_moon_user
 python manage.py runserver        # http://127.0.0.1:8000/api/v1/
 
-# 3) Web (requiere la API corriendo, se consulta en build)
+# 3) Web
 cd web
 npm install
 npm run dev                        # http://localhost:3000
@@ -66,7 +66,7 @@ Para un dispositivo físico, configura la IP del equipo en
 
 ## Despliegue (producción)
 
-Plan gratuito: API en Render Free, PostgreSQL en Supabase Free, web estática en
+Plan gratuito: API en Render Free, PostgreSQL en Supabase Free, web con ISR en
 Vercel Hobby y APK release firmado para instalación directa. Guía completa:
 [`docs/deployment.md`](docs/deployment.md).
 

@@ -1,12 +1,12 @@
-import threading
-import urllib.request
-import urllib.parse
-import urllib.error
+import hashlib
 import os
+import threading
+import urllib.parse
+import urllib.request
 
-from django.db.models.signals import pre_save, post_save
 from django.db import transaction
 from django.dispatch import receiver
+from django.db.models.signals import post_delete, post_save, pre_save
 
 from .models import Post
 
@@ -45,7 +45,9 @@ def _send_webhook(old_status, new_status):
         method="POST",
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
-            "X-Revalidate-Secret": revalidate_secret,
+            "X-Revalidate-Secret": hashlib.sha256(
+                revalidate_secret.encode("utf-8")
+            ).hexdigest(),
         },
     )
 
@@ -107,3 +109,9 @@ def _on_post_save(sender, instance, created, **kwargs):
         )
 
 
+@receiver(post_delete, sender=Post)
+def _on_post_delete(sender, instance, **kwargs):
+    """Invalidate public pages after deleting a published post."""
+    transaction.on_commit(
+        lambda: _send_webhook(instance.status, Post.Status.DRAFT)
+    )

@@ -240,8 +240,9 @@ Límites del plan **Supabase Free** (agosto 2026):
 ### Publicar contenido
 
 1. Moon publica/edita desde la app Android (API en Render, BD en Supabase).
-2. Si la web debe actualizarse: disparar `scripts/deploy-web.sh` (Deploy Hook)
-   o hacer push a GitHub.
+2. Render invalida el tag `posts` en Vercel por webhook; la siguiente petición
+   sirve contenido fresco. Un push a GitHub solo es necesario para cambios de
+   código.
 
 ### Ping anti-pausa
 
@@ -278,7 +279,7 @@ una máquina con el código (igual que en la creación inicial):
 - [ ] Servicio en Render desplegado y `/api/v1/health/` y `/api/v1/public/posts/`
       responden.
 - [ ] Web en Vercel desplegada (root `web`, `API_BASE_URL` + `SITE_URL`).
-- [ ] Deploy Hook creado y probado con `scripts/deploy-web.sh`.
+- [ ] Webhook de revalidación probado al publicar y retirar un post.
 - [ ] Keystore generado y custodiado; APK release firmado e instalado en el
       dispositivo de Moon con la URL real de la API.
 - [ ] Primer backup de producción ejecutado y guardado offsite.

@@ -10,11 +10,10 @@ function getSiteUrl(): string {
 }
 
 /**
- * `robots.txt` estático generado en build (`out/robots.txt`).
+ * `robots.txt` se sirve como metadata route de Next.js.
  *
  * Se permite el rastreo completo y se referencia el sitemap. Igual que el
- * sitemap, se fuerza estático para que Next lo genere como metadata route
- * y funcione con `output: 'export'`.
+ * sitemap, se fuerza estático porque no depende del contenido de la API.
  */
 export const dynamic = "force-static";
 
