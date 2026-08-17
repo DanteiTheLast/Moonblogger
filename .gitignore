@@ -44,3 +44,8 @@ captures/
 *.swo
 .DS_Store
 Thumbs.db
+.aider*
+
+# Secret scanning reports (never commit scan output).
+gitleaks-report.json
+gitleaks-report.sarif

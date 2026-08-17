@@ -1,0 +1,15 @@
+title = "MoonBlogger Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# These exact values are deliberately fake fixtures/placeholders. Real
+# credentials must never be added here; revoke and rotate them instead.
+[allowlist]
+description = "Known non-secret fixture and placeholder values"
+regexes = [
+  '''(?i)cambia-este-secreto''',
+  '''(?i)cambia-esta-contrasena-local''',
+  '''(?i)test-secret''',
+  '''(?i)pass1234''',
+]

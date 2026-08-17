@@ -285,6 +285,25 @@ de 750 h/mes del plan free.
 - API: `GET /api/v1/health/` → `{"status": "ok"}`.
 - Web: `GET /` responde con el listado de publicaciones publicadas.
 
+### Escaneo de secretos
+
+GitHub Actions ejecuta Gitleaks en cada `push`, Pull Request y ejecución manual.
+La configuración está en `.gitleaks.toml`; las exclusiones solo cubren fixtures
+de tests y placeholders documentales, nunca credenciales reales.
+
+Para revisar localmente antes de subir cambios, instalar Gitleaks y ejecutar:
+
+```bash
+gitleaks dir --redact .
+gitleaks git --redact .
+```
+
+`gitleaks dir` revisa el contenido actual del directorio, mientras `gitleaks
+git` revisa el historial. Si aparece un secreto real, revocarlo o rotarlo
+primero; borrar la línea o crear un commit posterior no elimina el valor del
+historial ni de clones existentes. Los reportes no deben versionarse porque
+pueden contener valores detectados.
+
 ### Diagnóstico de `media/complete` en Storage
 
 Si el `PUT` a una URL firmada termina pero `POST .../media/complete/` responde
