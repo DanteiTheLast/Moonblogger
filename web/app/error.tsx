@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import styles from "./error.module.css";
+import KotoSprite from "@/components/KotoSprite";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -15,6 +16,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
 
   return (
     <div className={styles.wrap} role="alert">
+      <KotoSprite variant="sleeping" size="lg" />
       <h1 className={styles.title}>Algo salió mal</h1>
       <p className={styles.text}>
         No pudimos cargar las publicaciones. Inténtalo de nuevo en un momento.

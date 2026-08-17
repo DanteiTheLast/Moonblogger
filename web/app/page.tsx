@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getPublishedPosts } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import styles from "./page.module.css";
+import KotoSprite from "@/components/KotoSprite";
 
 export const metadata: Metadata = {
   title: "MoonBlogger",
@@ -22,14 +23,15 @@ export default async function HomePage() {
   return (
     <>
       <section className={styles.hero}>
-        <h1 className={styles.heroTitle}>MoonBlogger</h1>
+        <div><h1 className={styles.heroTitle}>MoonBlogger</h1>
         <p className={styles.heroText}>
           Hola, soy Moon. Aquí guardo mis publicaciones.
-        </p>
+        </p></div><KotoSprite variant="sitting" size="lg" />
       </section>
 
       {posts.length === 0 ? (
         <p className={styles.empty} role="status">
+          <KotoSprite variant="sleeping" size="md" />
           Todavía no hay publicaciones.
         </p>
       ) : (

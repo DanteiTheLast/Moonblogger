@@ -30,6 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import com.moonblogger.app.ui.components.KotoPose
+import com.moonblogger.app.ui.components.KotoSize
+import com.moonblogger.app.ui.components.KotoSprite
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moonblogger.app.R
@@ -183,7 +186,7 @@ private fun EmptyState(onNewPost: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        DecorativeMotif()
+        KotoSprite(pose = KotoPose.Sleeping, size = KotoSize.Medium)
         Text(
             text = stringResource(R.string.posts_empty),
             style = MaterialTheme.typography.bodyLarge,

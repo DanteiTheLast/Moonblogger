@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { PostListItem } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import styles from "./PostCard.module.css";
+import KotoSprite from "./KotoSprite";
 
 const EXCERPT_LENGTH = 220;
 
@@ -39,7 +40,7 @@ export default function PostCard({ post }: PostCardProps) {
           />
         ) : (
           <div className={styles.thumbnailFallback}>
-            <span className={styles.fallbackShape} aria-hidden="true" />
+            <KotoSprite variant="sleeping" size="md" />
             <span>Sin portada disponible</span>
           </div>
         )}

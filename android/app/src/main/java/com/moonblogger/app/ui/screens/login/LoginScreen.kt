@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moonblogger.app.R
 import com.moonblogger.app.ui.components.DecorativeMotif
+import com.moonblogger.app.ui.components.KotoSprite
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
@@ -46,7 +47,7 @@ fun LoginScreen(viewModel: LoginViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        DecorativeMotif()
+        KotoSprite()
         Text(
             text = stringResource(R.string.login_title),
             style = MaterialTheme.typography.displaySmall,

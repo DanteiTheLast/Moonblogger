@@ -1,6 +1,7 @@
 package com.moonblogger.app.ui.components
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,7 +33,7 @@ fun StatusChip(
     }
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small),
         shape = MaterialTheme.shapes.small,
         color = containerColor,
         contentColor = MoonText,

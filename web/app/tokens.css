@@ -8,19 +8,11 @@
 
 :root {
   /* Color */
-  --color-bg: #fff7f8;
-  --color-surface: #ffffff;
-  --color-surface-alt: #fff0f4;
-  --color-pink: #f2b5c9;
-  --color-lavender: #e6d8f6;
-  --color-text: #392b32;
-  --color-text-muted: #68515b;
-  --color-primary: #a13d65;
-  --color-primary-hover: #7f2d4d;
-  --color-border: #efd5df;
-  --color-focus: #6541a2;
-  --color-success: #286b52;
-  --color-danger: #a53545;
+  --color-bg: #FFF6FB; --color-surface: #FFFCFE; --color-surface-alt: #FFF0F6;
+  --color-pink: #F6B7D0; --color-lavender: #E8DFFF; --color-text: #3B2A3B;
+  --color-text-muted: #6E596A; --color-primary: #913C68; --color-primary-hover: #6F294D;
+  --color-border: #F6B7D0; --color-focus: #543A91; --color-success: #286b52; --color-danger: #A43853;
+  --color-peach: #FFD1B3; --color-mint: #DDF5E8; --color-rose-soft: #FFE1EE;
 
   /* Tipografía (variables inyectadas por next/font en <html>) */
   --font-sans: var(--font-nunito), "Nunito", system-ui, -apple-system, sans-serif;
@@ -37,14 +29,15 @@
   --space-8: 4rem;
 
   /* Formas */
-  --radius-sm: 0.75rem;
-  --radius-md: 1.25rem;
-  --radius-lg: 2rem;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
   --radius-pill: 999px;
 
   /* Sombras mínimas */
-  --shadow-sm: 0 1px 2px rgb(61 47 53 / 0.06);
-  --shadow-md: 0 4px 14px rgb(61 47 53 / 0.08);
+  --pixel-border: 2px solid var(--color-text);
+  --shadow-sm: 3px 3px 0 #E8DFFF;
+  --shadow-md: 5px 5px 0 #F6B7D0;
   --ease-standard: cubic-bezier(0.2, 0.75, 0.25, 1);
   --duration-fast: 160ms;
   --duration-normal: 240ms;
