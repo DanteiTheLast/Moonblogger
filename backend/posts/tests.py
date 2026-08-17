@@ -448,7 +448,7 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertEqual(request.get_method(), "POST")
         self.assertIn("/object/upload/sign/private/posts/a/asset", request.full_url)
         self.assertNotIn("not-a-real-secret", request.full_url)
-        self.assertIsNone(request.data)
+        self.assertEqual(request.data, b"{}")
 
     @patch("posts.storage.urlopen")
     def test_object_info_uses_head_exact_object_path_and_asset_headers(self, urlopen_mock):
@@ -561,7 +561,9 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.storage.delete("public", "posts/a/asset")
         request = urlopen_mock.call_args.args[0]
         self.assertEqual(request.get_method(), "DELETE")
-        self.assertIn("/object/public/posts/a/asset", request.full_url)
+        self.assertEqual(request.full_url, "https://project.test/storage/v1/object/public")
+        self.assertEqual(json.loads(request.data), {"prefixes": ["posts/a/asset"]})
+        self.assertNotIn("not-a-real-secret", request.full_url)
         urlopen_mock.side_effect = HTTPError("https://project.test", 404, "missing", {}, io.BytesIO())
         self.storage.delete("public", "posts/a/asset")
 

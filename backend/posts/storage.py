@@ -148,9 +148,13 @@ class SupabaseStorage:
         return error_data.get("code") == "NoSuchKey" or error_data.get("statusCode") == "404"
 
     def create_upload_url(self, object_key, expires_in):
+        # Supabase's signed-upload endpoint requires a JSON request body.  The
+        # endpoint has its own fixed validity period; ``expires_in`` remains an
+        # application-only deadline for completing and cleaning up the intent.
         data = self._request(
             "POST",
             f"/object/upload/sign/{quote(self.private_bucket, safe='')}/{quote(object_key, safe='/')}",
+            {},
         )
         signed_url = data.get("url") or data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
@@ -195,7 +199,8 @@ class SupabaseStorage:
         try:
             self._request(
                 "DELETE",
-                f"/object/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
+                f"/object/{quote(bucket, safe='')}",
+                {"prefixes": [object_key]},
             )
         except StorageObjectNotFound:
             # Storage deletion is idempotent: an already absent object is clean.
