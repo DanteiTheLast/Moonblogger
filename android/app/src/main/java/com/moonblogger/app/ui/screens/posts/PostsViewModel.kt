@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 data class PostsUiState(
     val isLoading: Boolean = true,
@@ -26,18 +27,45 @@ class PostsViewModel(
     private val _uiState = MutableStateFlow(PostsUiState())
     val uiState: StateFlow<PostsUiState> = _uiState.asStateFlow()
 
-    private var initialLoadStarted = false
+    private var hasLoaded = false
+    private var activeRequest: Job? = null
 
-    /** Carga inicial; se ejecuta una vez por instancia (al entrar en pantalla). */
-    fun start() {
-        if (initialLoadStarted) return
-        initialLoadStarted = true
-        load()
+    /** Invocado al volver a estar visible: carga inicial o refresh silencioso. */
+    fun onScreenResumed() {
+        if (activeRequest?.isActive == true) return
+        val initial = !hasLoaded
+        activeRequest = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = initial,
+                    isRefreshing = !initial,
+                    error = null,
+                )
+            }
+            repository.listPosts()
+                .onSuccess { posts ->
+                    hasLoaded = true
+                    _uiState.update {
+                        it.copy(isLoading = false, isRefreshing = false, posts = posts)
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRefreshing = false,
+                            error = ApiErrors.userMessage(e),
+                        )
+                    }
+                }
+        }.also { job ->
+            job.invokeOnCompletion { if (activeRequest === job) activeRequest = null }
+        }
     }
 
     fun refresh() {
-        if (_uiState.value.isRefreshing) return
-        viewModelScope.launch {
+        if (activeRequest?.isActive == true) return
+        activeRequest = viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, error = null) }
             repository.listPosts()
                 .onSuccess { posts ->
@@ -48,21 +76,8 @@ class PostsViewModel(
                         it.copy(isRefreshing = false, error = ApiErrors.userMessage(e))
                     }
                 }
-        }
-    }
-
-    private fun load() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            repository.listPosts()
-                .onSuccess { posts ->
-                    _uiState.update { it.copy(isLoading = false, posts = posts) }
-                }
-                .onFailure { e ->
-                    _uiState.update {
-                        it.copy(isLoading = false, error = ApiErrors.userMessage(e))
-                    }
-                }
+        }.also { job ->
+            job.invokeOnCompletion { if (activeRequest === job) activeRequest = null }
         }
     }
 }
