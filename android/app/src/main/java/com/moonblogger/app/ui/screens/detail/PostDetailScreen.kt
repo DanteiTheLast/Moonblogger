@@ -155,7 +155,7 @@ fun PostDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    PostMediaViewer(post.media, state.mediaReadUrls, state.mediaError)
+                    PostMediaViewer(post.media, state.mediaReadUrls, state.mediaError, viewModel::retryMediaReadUrls)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(Modifier.height(4.dp))
                     Text(

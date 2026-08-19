@@ -70,4 +70,14 @@ class PostDetailViewModel(
                 }
         }
     }
+
+    /** Requests fresh signed/read URLs; retry must not reuse an expired URL. */
+    fun retryMediaReadUrls() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(mediaReadUrls = emptyList(), mediaError = null) }
+            repository.getMediaReadUrls(postId)
+                .onSuccess { response -> _uiState.update { it.copy(mediaReadUrls = response.media) } }
+                .onFailure { e -> _uiState.update { it.copy(mediaError = ApiErrors.userMessage(e)) } }
+        }
+    }
 }

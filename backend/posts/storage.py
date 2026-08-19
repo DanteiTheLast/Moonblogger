@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -166,7 +166,13 @@ class SupabaseStorage:
         signed_url = data.get("signedURL") or data.get("signedUrl") or data.get("url")
         if not isinstance(signed_url, str) or not signed_url:
             raise StorageError("Supabase Storage no devolvió una URL de lectura.")
-        return signed_url if signed_url.startswith("http") else urljoin(f"{self.base_url}/", signed_url.lstrip("/"))
+        if signed_url.startswith(("http://", "https://")):
+            return signed_url
+        if signed_url.startswith("/storage/v1/"):
+            return f"{self.base_url}{signed_url}"
+        if signed_url.startswith("/object/sign/"):
+            return f"{self.base_url}/storage/v1{signed_url}"
+        return f"{self.base_url}/storage/v1/{signed_url.lstrip('/')}"
 
     def get_object_info(self, bucket, object_key):
         headers = self._request(

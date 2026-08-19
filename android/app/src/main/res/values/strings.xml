@@ -40,6 +40,7 @@
     <string name="media_next">Imagen siguiente</string>
     <string name="media_empty">No hay multimedia disponible.</string>
     <string name="media_error">No se pudo cargar la multimedia.</string>
+    <string name="media_loading">Cargando multimedia…</string>
 
     <!-- Editor -->
     <string name="editor_title_new">Nueva publicación</string>

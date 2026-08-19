@@ -89,8 +89,8 @@ android {
         applicationId = "com.moonblogger.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -170,6 +170,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     // Almacenamiento cifrado de tokens (EncryptedSharedPreferences, 1.1.0).
     // NOTA: la librería está deprecada upstream (ver android/README.md, D7).

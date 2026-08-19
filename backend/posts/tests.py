@@ -613,6 +613,31 @@ class SupabaseStorageAdapterTests(APITestCase):
         self.assertNotIn("not-a-real-secret", result)
 
     @patch("posts.storage.urlopen")
+    def test_signed_read_url_preserves_absolute_url_without_leaking_secret(self, urlopen_mock):
+        signed_url = "https://cdn.test/storage/v1/object/sign/private/posts/a/asset?token=abc"
+        urlopen_mock.return_value = FakeHTTPResponse(json.dumps({"signedURL": signed_url}).encode())
+
+        result = self.storage.create_signed_read_url("posts/a/asset", 300)
+
+        self.assertEqual(result, signed_url)
+        self.assertNotIn("not-a-real-secret", result)
+
+    @patch("posts.storage.urlopen")
+    def test_signed_read_url_normalizes_object_sign_relative_url_without_duplicate_prefix(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse(
+            json.dumps({"signedURL": "/object/sign/private/posts/a/asset?token=abc"}).encode()
+        )
+
+        result = self.storage.create_signed_read_url("posts/a/asset", 300)
+
+        self.assertEqual(
+            result,
+            "https://project.test/storage/v1/object/sign/private/posts/a/asset?token=abc",
+        )
+        self.assertEqual(result.count("/storage/v1"), 1)
+        self.assertNotIn("not-a-real-secret", result)
+
+    @patch("posts.storage.urlopen")
     def test_object_info_uses_head_exact_object_path_and_asset_headers(self, urlopen_mock):
         response = FakeHTTPResponse(
             headers={"Content-Length": "123", "Content-Type": "image/jpeg"}

@@ -22,6 +22,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import coil3.ImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
@@ -54,6 +56,11 @@ class AppContainer(context: Context) {
     private val baseOkHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
+        .build()
+
+    /** Loader for signed storage URLs; deliberately uses the public client. */
+    val imageLoader: ImageLoader = ImageLoader.Builder(appContext)
+        .components { add(OkHttpNetworkFetcherFactory(callFactory = { baseOkHttpClient })) }
         .build()
 
     private val authRetrofit: Retrofit = Retrofit.Builder()
