@@ -27,23 +27,25 @@ export default function PostCard({ post }: PostCardProps) {
   return (
     <li className={styles.item}>
       <article className={styles.card}>
-        {coverUrl ? (
-          // Se usa <img> nativo: las URLs públicas de Supabase no requieren ni
-          // deben añadirse a la configuración de hosts de next/image.
-          <img
-            className={styles.thumbnailImage}
-            src={coverUrl}
-            alt={coverAlt}
-            width={cover?.width ?? undefined}
-            height={cover?.height ?? undefined}
-            loading="lazy"
-          />
-        ) : (
-          <div className={styles.thumbnailFallback}>
-            <KotoSprite variant="sleeping" size="md" />
-            <span>Sin portada disponible</span>
-          </div>
-        )}
+        <div className={styles.thumbnailFrame}>
+          {coverUrl ? (
+            // Se usa <img> nativo: las URLs públicas de Supabase no requieren ni
+            // deben añadirse a la configuración de hosts de next/image.
+            <img
+              className={styles.thumbnailImage}
+              src={coverUrl}
+              alt={coverAlt}
+              width={cover?.width ?? undefined}
+              height={cover?.height ?? undefined}
+              loading="lazy"
+            />
+          ) : (
+            <div className={styles.thumbnailFallback}>
+              <KotoSprite variant="sleeping" size="md" />
+              <span>Sin portada disponible</span>
+            </div>
+          )}
+        </div>
         <div className={styles.body}>
           <h2 className={styles.title}>
             <Link href={`/posts/${post.slug}`}>{post.title}</Link>

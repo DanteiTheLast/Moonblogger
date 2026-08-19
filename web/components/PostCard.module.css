@@ -21,11 +21,21 @@
   box-shadow: var(--shadow-md);
 }
 
+.thumbnailFrame {
+  width: 100%;
+  height: clamp(12rem, 38vw, 22.5rem);
+  max-height: 50dvh;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: var(--pixel-border);
+  background: var(--color-surface-alt);
+  box-shadow: var(--shadow-sm);
+}
+
 .thumbnailImage,
 .thumbnailFallback {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-md);
+  height: 100%;
 }
 
 .fallbackShape {
@@ -41,7 +51,6 @@
   display: block;
   object-fit: cover;
   background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
 }
 
 .thumbnailFallback {
@@ -50,9 +59,14 @@
   justify-content: center;
   gap: var(--space-2);
   background: var(--color-surface-alt);
-  border: 1px dashed var(--color-border);
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+@media (max-width: 30rem) {
+  .thumbnailFrame {
+    height: clamp(11rem, 56vw, 17rem);
+  }
 }
 
 .body {
