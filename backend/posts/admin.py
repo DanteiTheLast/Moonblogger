@@ -9,6 +9,10 @@ class PublicVisitAdmin(admin.ModelAdmin):
     search_fields = ("path", "ip_address", "user_agent")
     readonly_fields = tuple(field.name for field in PublicVisit._meta.fields)
 
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):

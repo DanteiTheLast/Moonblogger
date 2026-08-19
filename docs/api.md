@@ -24,6 +24,16 @@
 
 ## Posts — privado (Android, autenticado)
 
+## Public visits — interno
+
+`POST /api/v1/internal/public-visits/` recibe exactamente `{path,event_id}`.
+La firma HMAC usa `timestamp\nevent_id\nip\npath\nua`; timestamp es Unix en
+string, IP se canonicaliza con `ipaddress`, y User-Agent se compacta (whitespace)
+y trunca a 512 bytes/caracteres antes de firmar y persistir. El endpoint verifica
+`X-Visitor-User-Agent` saneado y `X-Visitor-IP` canonicalizada, no acepta IP en el
+body, deduplica UUIDs y aplica 30 eventos/minuto por IP. Los detalles no se
+devuelven; replay válido responde 204 sin incrementar.
+
 | Método | Ruta | Entrada | Respuesta |
 |---|---|---|---|
 | GET | `/api/v1/posts/` | `?status=draft\|published` (opcional) | Lista paginada (incluye borradores) |
@@ -147,7 +157,11 @@ La eliminación remota usa el contrato de Supabase
 claves se mantienen internas: no forman parte de la API de MoonBlogger.
 # Visitas públicas
 
-`POST /api/v1/internal/public-visits/` acepta únicamente `{ "path": "/" }` o un
-path de post publicado. Requiere `X-Visitor-IP`, `X-Visitor-Timestamp` y
-`X-Visitor-Signature` (HMAC-SHA256 de `timestamp\nip\npath\nuser-agent`). Devuelve
-204; los errores no revelan si existe un post o una IP.
+`POST /api/v1/internal/public-visits/` acepta exactamente
+`{"path":"/","event_id":"<uuid>"}` o un path de post publicado. Requiere
+`X-Visitor-IP`, `X-Visitor-User-Agent`, `X-Visitor-Timestamp` y
+`X-Visitor-Signature`. La firma HMAC-SHA256 usa las líneas
+`timestamp\nevent_id\nip_canonicalizada\npath\nua_saneado`; el timestamp es Unix y
+solo se acepta dentro de `VISIT_FORWARDING_MAX_AGE_SECONDS`. La repetición del
+mismo `event_id` es idempotente y no incrementa el contador. Devuelve 204; los
+errores no revelan si existe un post, una IP, una firma o un secreto.

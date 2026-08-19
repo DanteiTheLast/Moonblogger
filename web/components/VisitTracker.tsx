@@ -11,10 +11,11 @@ export default function VisitTracker() {
   useEffect(() => {
     if (!trackable(pathname) || sent.current.has(pathname)) return;
     sent.current.add(pathname);
-    const body = JSON.stringify({ path: pathname });
+    const body = JSON.stringify({ path: pathname, event_id: crypto.randomUUID() });
     const blob = new Blob([body], { type: "application/json" });
-    if (navigator.sendBeacon) navigator.sendBeacon("/api/visit", blob);
-    else void fetch("/api/visit", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+    if (!navigator.sendBeacon || !navigator.sendBeacon("/api/visit", blob)) {
+      void fetch("/api/visit", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => undefined);
+    }
   }, [pathname]);
   return null;
 }

@@ -2,6 +2,7 @@ from datetime import timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.db import transaction, IntegrityError
+from django.core.cache import cache
 from django.db.models import F
 from django.db.models import Prefetch
 from django.utils import timezone
@@ -10,7 +11,7 @@ from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Post, PostMedia, PublicVisit
+from .models import Post, PostMedia, PublicVisit, PublicVisitEvent
 from .analytics import cleanup_expired_visits, sanitize_user_agent, valid_public_path, verified_visitor_ip, utc_now
 
 class PublicVisitView(APIView):
@@ -19,19 +20,42 @@ class PublicVisitView(APIView):
     def post(self, request):
         if not settings.VISIT_FORWARDING_SECRET:
             return Response(status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        if not isinstance(request.data, dict) or set(request.data) != {"path"}:
+        if not isinstance(request.data, dict) or set(request.data) != {"path", "event_id"}:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         path = request.data.get("path")
-        if not isinstance(path, str) or not valid_public_path(path):
+        event_id = request.data.get("event_id")
+        if not isinstance(path, str) or not valid_public_path(path) or not isinstance(event_id, str):
             return Response(status=status.HTTP_400_BAD_REQUEST)
-        ua = sanitize_user_agent(request.headers.get("User-Agent", ""))
-        ip = verified_visitor_ip(request, path, ua)
+        ua = sanitize_user_agent(request.headers.get("X-Visitor-User-Agent", ""))
+        timestamp = request.headers.get("X-Visitor-Timestamp", "")
+        ip = verified_visitor_ip(request, timestamp, event_id, path, ua)
         if not ip:
             return Response(status=status.HTTP_400_BAD_REQUEST)
+        try:
+            event_id = str(__import__("uuid").UUID(event_id))
+        except (ValueError, AttributeError, TypeError):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        bucket = f"public-visit:{ip}"
+        if not cache.add(bucket, 1, timeout=60):
+            try:
+                if cache.incr(bucket) > 30:
+                    return Response(status=status.HTTP_429_TOO_MANY_REQUESTS)
+            except ValueError:
+                cache.set(bucket, 1, timeout=60)
         now = utc_now()
         try:
             with transaction.atomic():
                 visit, created = PublicVisit.objects.get_or_create(path=path, ip_address=ip, visit_date=now.date(), defaults={"user_agent": ua, "first_seen_at": now, "last_seen_at": now})
+                try:
+                    # Roll back only the failed insert so the enclosing transaction
+                    # remains usable when a replay races with another request.
+                    with transaction.atomic():
+                        PublicVisitEvent.objects.create(event_id=event_id, visit=visit, path=path, ip_address=ip)
+                except IntegrityError:
+                    existing = PublicVisitEvent.objects.filter(event_id=event_id).first()
+                    if not existing or existing.path != path or existing.ip_address != ip:
+                        return Response(status=status.HTTP_400_BAD_REQUEST)
+                    return Response(status=status.HTTP_204_NO_CONTENT)
                 if not created:
                     PublicVisit.objects.filter(pk=visit.pk).update(last_seen_at=now, hit_count=F("hit_count") + 1, user_agent=ua)
         except IntegrityError:

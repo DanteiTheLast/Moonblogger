@@ -1,19 +1,23 @@
 from datetime import timedelta
 import hashlib
+import hmac
 import io
 import json
+import time
+import uuid
 from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.management import call_command
+from django.core.cache import cache
 from django.test import override_settings
 from django.utils import timezone
 from urllib.error import HTTPError, URLError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Post, PostMedia, StorageDeletionTask
+from .models import Post, PostMedia, PublicVisit, PublicVisitEvent, StorageDeletionTask
 from .storage import (
     ObjectInfo,
     StorageError,
@@ -216,6 +220,142 @@ class PublicPostAPITests(APITestCase):
         resp = self.client.get("/api/v1/health/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["status"], "ok")
+
+
+@override_settings(VISIT_FORWARDING_SECRET="visit-test-secret")
+class PublicVisitAPITests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user("visitor-tests", password="pass1234")
+        self.published = create_post(self.user, "Visitor post", status="published")
+
+    def signed_headers(self, *, path="/", ip="203.0.113.10", user_agent="Web\n  Browser", event_id=None):
+        timestamp = str(int(time.time()))
+        event_id = event_id or str(uuid.uuid4())
+        sanitized_user_agent = " ".join(user_agent.split())[:512]
+        from .analytics import canonical_ip
+        payload = f"{timestamp}\n{event_id}\n{canonical_ip(ip)}\n{path}\n{sanitized_user_agent}".encode()
+        signature = hmac.new(
+            settings.VISIT_FORWARDING_SECRET.encode(), payload, hashlib.sha256
+        ).hexdigest()
+        return {
+            "HTTP_X_VISITOR_TIMESTAMP": timestamp,
+            "HTTP_X_VISITOR_IP": ip,
+            "HTTP_X_VISITOR_USER_AGENT": user_agent,
+            "HTTP_X_VISITOR_SIGNATURE": signature,
+            "event_id": event_id,
+        }
+
+    def post_signed(self, headers, **data):
+        event_id = headers.pop("event_id")
+        return self.client.post(
+            "/api/v1/internal/public-visits/", {"path": data.pop("path", "/"), "event_id": event_id},
+            format="json", **headers, **data
+        )
+
+    def test_signed_visit_uses_exact_forwarded_headers_and_persists_sanitized_ua(self):
+        headers = self.signed_headers()
+        response = self.client.post(
+            "/api/v1/internal/public-visits/", {"path": "/", "event_id": headers.pop("event_id")},
+            format="json", HTTP_USER_AGENT="connection-agent", **headers
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        visit = PublicVisit.objects.get()
+        self.assertEqual(visit.ip_address, "203.0.113.10")
+        self.assertEqual(visit.user_agent, "Web Browser")
+        self.assertNotEqual(visit.user_agent, "connection-agent")
+        self.assertEqual(int(headers["HTTP_X_VISITOR_TIMESTAMP"]), int(time.time()))
+
+    def test_invalid_signature_does_not_persist_or_leak_details(self):
+        headers = self.signed_headers()
+        headers["HTTP_X_VISITOR_SIGNATURE"] = "invalid-signature"
+        response = self.client.post(
+            "/api/v1/internal/public-visits/", {"path": "/", "event_id": headers.pop("event_id")},
+            format="json", HTTP_USER_AGENT="secret-connection-agent", **headers
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(PublicVisit.objects.count(), 0)
+        body = response.content.decode()
+        self.assertNotIn("invalid-signature", body)
+        self.assertNotIn("secret-connection-agent", body)
+
+    def test_ip_is_not_read_from_request_body(self):
+        headers = self.signed_headers(ip="203.0.113.10")
+        response = self.client.post(
+            "/api/v1/internal/public-visits/",
+            {"path": "/", "ip": "198.51.100.99", "event_id": headers.pop("event_id")},
+            format="json", **headers
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(PublicVisit.objects.count(), 0)
+
+    def test_replay_same_event_id_is_idempotent(self):
+        headers = self.signed_headers()
+        first = self.post_signed(headers.copy())
+        replay = self.post_signed(headers.copy())
+        self.assertEqual(first.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(replay.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(PublicVisit.objects.get().hit_count, 1)
+
+    def test_same_event_id_with_different_path_or_ip_is_rejected(self):
+        headers = self.signed_headers()
+        self.assertEqual(self.post_signed(headers.copy()).status_code, 204)
+        changed_path = self.signed_headers(path=f"/posts/{self.published.slug}", event_id=headers["event_id"])
+        self.assertEqual(self.post_signed(changed_path, path=f"/posts/{self.published.slug}").status_code, 400)
+        changed_ip = self.signed_headers(ip="198.51.100.7", event_id=headers["event_id"])
+        self.assertEqual(self.post_signed(changed_ip).status_code, 400)
+
+    def test_distinct_event_ids_increment_hit_count(self):
+        self.assertEqual(self.post_signed(self.signed_headers()).status_code, 204)
+        self.assertEqual(self.post_signed(self.signed_headers()).status_code, 204)
+        self.assertEqual(PublicVisit.objects.get().hit_count, 2)
+
+    def test_timestamp_must_be_integer_and_current(self):
+        for timestamp in ("not-an-integer", str(int(time.time()) - 1000), str(int(time.time()) + 1000)):
+            with self.subTest(timestamp=timestamp):
+                headers = self.signed_headers()
+                headers["HTTP_X_VISITOR_TIMESTAMP"] = timestamp
+                self.assertEqual(self.post_signed(headers).status_code, 400)
+
+    def test_ipv6_is_canonicalized(self):
+        headers = self.signed_headers(ip="2001:0db8:0000:0000:0000:0000:0000:0001")
+        self.assertEqual(self.post_signed(headers).status_code, 204)
+        self.assertEqual(PublicVisit.objects.get().ip_address, "2001:db8::1")
+
+    def test_user_agent_is_compacted_and_truncated(self):
+        ua = "A" * 513
+        headers = self.signed_headers(user_agent=ua)
+        self.assertEqual(self.post_signed(headers).status_code, 204)
+        visit = PublicVisit.objects.get()
+        self.assertLessEqual(len(visit.user_agent), 512)
+        self.assertNotRegex(visit.user_agent, r"\s{2,}")
+
+    @override_settings(VISIT_FORWARDING_SECRET="")
+    def test_missing_secret_returns_503(self):
+        self.assertEqual(self.client.post("/api/v1/internal/public-visits/", {}).status_code, 503)
+
+    def test_rate_limit_allows_30_and_rejects_31_with_isolated_cache(self):
+        for _ in range(30):
+            self.assertEqual(self.post_signed(self.signed_headers()).status_code, 204)
+        self.assertEqual(self.post_signed(self.signed_headers()).status_code, 429)
+        cache.clear()
+        self.assertEqual(self.post_signed(self.signed_headers()).status_code, 204)
+
+    def test_cleanup_expired_visits_cascades_events_and_command(self):
+        old = PublicVisit.objects.create(path="/", ip_address="203.0.113.2", visit_date=timezone.now().date() - timedelta(days=31), first_seen_at=timezone.now(), last_seen_at=timezone.now())
+        PublicVisitEvent.objects.create(event_id=uuid.uuid4(), visit=old, path="/", ip_address=old.ip_address)
+        call_command("cleanup_public_visits")
+        self.assertFalse(PublicVisit.objects.filter(pk=old.pk).exists())
+        self.assertFalse(PublicVisitEvent.objects.filter(visit_id=old.pk).exists())
+
+    def test_public_visits_only_allow_post(self):
+        for method in ("get", "put", "patch", "delete"):
+            with self.subTest(method=method):
+                response = getattr(self.client, method)("/api/v1/internal/public-visits/")
+                self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class WebhookSignalTests(APITestCase):

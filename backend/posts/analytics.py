@@ -3,6 +3,7 @@ import hmac
 import ipaddress
 import re
 import time
+from uuid import UUID
 from datetime import datetime, timedelta, timezone
 
 from django.conf import settings
@@ -20,21 +21,34 @@ def valid_public_path(path):
     match = POST_PATH.fullmatch(path or "")
     return bool(match and Post.objects.filter(slug=match.group(1), status=Post.Status.PUBLISHED).exists())
 
-def verified_visitor_ip(request, path, user_agent):
+def canonical_ip(value):
+    try:
+        return str(ipaddress.ip_address(str(value).strip()))
+    except (ValueError, TypeError):
+        return None
+
+def canonical_event_id(value):
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+def verified_visitor_ip(request, timestamp, event_id, path, user_agent):
     secret = getattr(settings, "VISIT_FORWARDING_SECRET", "")
-    timestamp = request.headers.get("X-Visitor-Timestamp", "")
     supplied = request.headers.get("X-Visitor-Signature", "")
     forwarded = request.headers.get("X-Visitor-IP", "")
     if not secret or not timestamp or not supplied or not forwarded:
         return None
     try:
         ts = int(timestamp)
-        ip = str(ipaddress.ip_address(forwarded.strip()))
+        ip = canonical_ip(forwarded)
+        if not ip or not canonical_event_id(event_id):
+            return None
     except (ValueError, TypeError):
         return None
     if abs(time.time() - ts) > settings.VISIT_FORWARDING_MAX_AGE_SECONDS:
         return None
-    payload = f"{ts}\n{ip}\n{path}\n{user_agent}".encode()
+    payload = f"{timestamp}\n{event_id}\n{ip}\n{path}\n{sanitize_user_agent(user_agent)}".encode()
     expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
     return ip if hmac.compare_digest(expected, supplied.strip().lower()) else None
 

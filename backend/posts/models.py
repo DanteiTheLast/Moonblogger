@@ -87,6 +87,18 @@ class PublicVisit(models.Model):
         ordering = ["-last_seen_at"]
 
 
+class PublicVisitEvent(models.Model):
+    """Signed event nonce; retained with its aggregate visit row."""
+    event_id = models.UUIDField(unique=True, editable=False)
+    visit = models.ForeignKey(PublicVisit, on_delete=models.CASCADE, related_name="events")
+    path = models.CharField(max_length=220)
+    ip_address = models.GenericIPAddressField(validators=[validate_ipv46_address])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("visit", "created_at"))]
+
+
 class PostMedia(models.Model):
     class Kind(models.TextChoices):
         IMAGE = "image", "Imagen"
