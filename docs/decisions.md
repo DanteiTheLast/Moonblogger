@@ -197,3 +197,8 @@ qué alternativas se consideraron.
   puede eliminar esta latencia si el volumen lo exige.
 - **Alternativas:** filesystem local (no persiste en Render), Cloudflare R2 (requiere cuenta separada, añade complejidad), proxy en API (bloquea worker).
 - **Tradeoffs:** 50 MB/archivo y 1 GB total limitan a imágenes y video muy corto; video serio requerirá plan pago o R2.
+# Decisiones
+
+Las visitas internas usan HMAC y no aceptan IP en el body; así el proxy es la
+única fuente confiable. Se almacena una fila diaria por IP/path para limitar el
+volumen y preservar agregación básica.

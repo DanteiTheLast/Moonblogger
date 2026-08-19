@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import Post, PostMedia, StorageDeletionTask
+from .models import Post, PostMedia, StorageDeletionTask, PublicVisit
+
+@admin.register(PublicVisit)
+class PublicVisitAdmin(admin.ModelAdmin):
+    list_display = ("path", "ip_address", "visit_date", "hit_count", "last_seen_at")
+    list_filter = ("visit_date",)
+    search_fields = ("path", "ip_address", "user_agent")
+    readonly_fields = tuple(field.name for field in PublicVisit._meta.fields)
 
 
 @admin.register(Post)

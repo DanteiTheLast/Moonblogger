@@ -145,3 +145,9 @@ TTL propio venza; no es una garantía de revocación instantánea.
 La eliminación remota usa el contrato de Supabase
 `DELETE /storage/v1/object/{bucket}` con cuerpo `{"prefixes":[key]}`. Las
 claves se mantienen internas: no forman parte de la API de MoonBlogger.
+# Visitas públicas
+
+`POST /api/v1/internal/public-visits/` acepta únicamente `{ "path": "/" }` o un
+path de post publicado. Requiere `X-Visitor-IP`, `X-Visitor-Timestamp` y
+`X-Visitor-Signature` (HMAC-SHA256 de `timestamp\nip\npath\nuser-agent`). Devuelve
+204; los errores no revelan si existe un post o una IP.

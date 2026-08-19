@@ -64,3 +64,7 @@ sin reescribir).
 - [Contrato de API](api.md)
 - [Base de datos](database.md)
 - [Despliegue y operación](deployment.md)
+# Contexto
+
+La API recibe eventos firmados del proxy y persiste analítica mínima en Django
+ORM/PostgreSQL. Ningún cliente accede directamente a la base de datos.

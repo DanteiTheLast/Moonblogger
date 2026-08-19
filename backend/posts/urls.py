@@ -11,6 +11,7 @@ from .views import (
     PostViewSet,
     PublicPostViewSet,
     UploadIntentView,
+    PublicVisitView,
 )
 
 router = DefaultRouter()
@@ -19,6 +20,7 @@ router.register("public/posts", PublicPostViewSet, basename="public-post")
 
 urlpatterns = [
     path("health/", HealthCheckView.as_view(), name="health"),
+    path("internal/public-visits/", PublicVisitView.as_view(), name="public-visits"),
     path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("posts/<int:post_id>/media/upload-intents/", UploadIntentView.as_view(), name="media-upload-intents"),

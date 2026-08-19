@@ -5,6 +5,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
+from django.core.validators import validate_ipv46_address
 
 User = get_user_model()
 
@@ -65,6 +66,25 @@ class Post(models.Model):
             slug = f"{base}-{counter}"
             counter += 1
         return slug
+
+
+class PublicVisit(models.Model):
+    path = models.CharField(max_length=220)
+    ip_address = models.GenericIPAddressField(validators=[validate_ipv46_address])
+    visit_date = models.DateField()
+    user_agent = models.CharField(max_length=512, blank=True)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    hit_count = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("path", "ip_address", "visit_date"), name="public_visit_unique_day")]
+        indexes = [
+            models.Index(fields=("visit_date", "path")),
+            models.Index(fields=("ip_address", "visit_date")),
+            models.Index(fields=("last_seen_at",)),
+        ]
+        ordering = ["-last_seen_at"]
 
 
 class PostMedia(models.Model):

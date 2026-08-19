@@ -1,7 +1,8 @@
 from datetime import timedelta, timezone as dt_timezone
 
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, IntegrityError
+from django.db.models import F
 from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -9,7 +10,34 @@ from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Post, PostMedia
+from .models import Post, PostMedia, PublicVisit
+from .analytics import cleanup_expired_visits, sanitize_user_agent, valid_public_path, verified_visitor_ip, utc_now
+
+class PublicVisitView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        if not settings.VISIT_FORWARDING_SECRET:
+            return Response(status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not isinstance(request.data, dict) or set(request.data) != {"path"}:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        path = request.data.get("path")
+        if not isinstance(path, str) or not valid_public_path(path):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        ua = sanitize_user_agent(request.headers.get("User-Agent", ""))
+        ip = verified_visitor_ip(request, path, ua)
+        if not ip:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        now = utc_now()
+        try:
+            with transaction.atomic():
+                visit, created = PublicVisit.objects.get_or_create(path=path, ip_address=ip, visit_date=now.date(), defaults={"user_agent": ua, "first_seen_at": now, "last_seen_at": now})
+                if not created:
+                    PublicVisit.objects.filter(pk=visit.pk).update(last_seen_at=now, hit_count=F("hit_count") + 1, user_agent=ua)
+        except IntegrityError:
+            PublicVisit.objects.filter(path=path, ip_address=ip, visit_date=now.date()).update(last_seen_at=now, hit_count=F("hit_count") + 1, user_agent=ua)
+        cleanup_expired_visits(settings.VISIT_CLEANUP_BATCH_SIZE)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     CompleteMediaSerializer,

@@ -132,3 +132,8 @@ generado debe copiarse fuera de la infraestructura (offsite); el destino
 final (copia manual, almacenamiento propio, otro proveedor…) lo decide el
 usuario. El volcado está en formato custom de PostgreSQL y se restaura con
 `pg_restore`.
+# PublicVisit
+
+`PublicVisit` agrupa visitas por path, IP y fecha UTC. La restricción única evita
+duplicados y `hit_count` se incrementa atómicamente. Los registros se retienen
+30 días por defecto y se limpian con `cleanup_public_visits`.

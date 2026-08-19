@@ -343,3 +343,7 @@ una máquina con el código (igual que en la creación inicial):
 - [ ] Keystore generado y custodiado; APK release firmado e instalado en el
       dispositivo de Moon con la URL real de la API.
 - [ ] Primer backup de producción ejecutado y guardado offsite.
+# Visitas
+
+En producción configure `VISIT_FORWARDING_SECRET` con el mismo secreto que el
+proxy firmante. Ejecute periódicamente `python manage.py cleanup_public_visits`.

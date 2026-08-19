@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Baloo_2, Nunito } from "next/font/google";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import VisitTracker from "@/components/VisitTracker";
 import styles from "./layout.module.css";
 import "./globals.css";
 
@@ -27,7 +28,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main-content" className={styles.skipLink}>
           Saltar al contenido
         </a>
-        <Header />
+         <Header />
+         <VisitTracker />
         <main id="main-content" className={styles.main}>
           {children}
         </main>
