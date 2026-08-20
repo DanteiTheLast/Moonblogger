@@ -1,49 +1,90 @@
 .post {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-5) var(--space-4);
+  gap: var(--space-6);
+  width: 100%;
+  max-width: var(--layout-reading-max);
+  margin-inline: auto;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  border: var(--border-solid);
+  background: var(--panel);
+  box-shadow: var(--shadow-hard-offset-md);
 }
 
 .header {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--border-solid);
 }
 
 .title {
-  font-size: 2rem;
+  width: 100%;
+  color: var(--ink-primary);
+  font-size: clamp(2rem, 9vw, 3.5rem);
+  overflow-wrap: anywhere;
 }
 
 .date {
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
+  color: var(--ink-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .content {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--ink-primary);
+  font-size: 1.0625rem;
+  line-height: 1.8;
 }
 
 .back {
-  align-self: flex-start;
-  min-height: 44px;
   display: inline-flex;
   align-items: center;
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-pill);
-  background: var(--color-pink);
-  color: var(--color-text);
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-solid);
+  background: var(--surface-soft);
+  color: var(--action);
+  box-shadow: var(--shadow-hard-offset-sm);
   font-weight: 700;
 }
 
+.back svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 2;
+}
+
 .back:hover {
-  background: var(--color-lavender);
+  background: var(--panel);
+  color: var(--action-hover);
   text-decoration: none;
+}
+
+.back:active {
+  transform: translate(var(--pixel-unit), var(--pixel-unit));
+  box-shadow: none;
+}
+
+@media (min-width: 42rem) {
+  .post {
+    padding: var(--space-7) var(--space-6);
+  }
+
+  .header,
+  .content {
+    width: 100%;
+    max-width: var(--layout-reading-max);
+  }
 }

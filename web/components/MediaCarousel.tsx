@@ -132,7 +132,9 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
             onClick={() => moveSlide(-1)}
             aria-label="Elemento anterior"
           >
-            <span aria-hidden="true">‹</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M9.75 3.25 5 8l4.75 4.75M5.5 8h6.25" />
+            </svg>
           </button>
           <div className={styles.indicators} aria-label="Seleccionar elemento">
             {items.map((item, index) => (
@@ -152,7 +154,9 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
             onClick={() => moveSlide(1)}
             aria-label="Elemento siguiente"
           >
-            <span aria-hidden="true">›</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="m6.25 3.25L11 8l-4.75 4.75M10.5 8H4.25" />
+            </svg>
           </button>
         </div>
       ) : null}

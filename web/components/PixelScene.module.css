@@ -1,0 +1,83 @@
+.scene {
+  position: relative;
+  width: min(100%, 22rem);
+  height: clamp(8rem, 34vw, 12rem);
+  overflow: hidden;
+  isolation: isolate;
+  border: var(--border-solid);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-hard-offset-sm);
+  image-rendering: pixelated;
+}
+
+.moon {
+  position: absolute;
+  top: 15%;
+  right: 17%;
+  z-index: 1;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: var(--border-solid);
+  background: var(--panel);
+  box-shadow: calc(var(--pixel-unit) * -1) var(--pixel-unit) 0 var(--border);
+}
+
+.starField { position: absolute; inset: 0; z-index: 1; }
+.star {
+  position: absolute;
+  width: var(--pixel-unit);
+  height: var(--pixel-unit);
+  background: var(--ink-primary);
+}
+.star:nth-child(1) { top: 18%; left: 14%; }
+.star:nth-child(2) { top: 35%; left: 37%; width: calc(var(--pixel-unit) * 2); height: calc(var(--pixel-unit) * 2); }
+.star:nth-child(3) { top: 12%; left: 58%; }
+.star:nth-child(4) { top: 48%; right: 10%; }
+
+.clouds { position: absolute; inset: 0; z-index: 2; }
+.cloud {
+  position: absolute;
+  width: 3rem;
+  height: 0.75rem;
+  border: var(--border-solid);
+  background: var(--panel);
+  box-shadow: var(--pixel-unit) calc(var(--pixel-unit) * -1) 0 var(--panel);
+}
+.cloud:nth-child(1) { top: 43%; left: 6%; }
+.cloud:nth-child(2) { top: 29%; right: -1rem; transform: scale(0.7); }
+
+.bunting { position: absolute; top: 6%; left: 28%; z-index: 2; display: flex; gap: var(--pixel-unit); }
+.bunting i { width: 0; height: 0; border-right: var(--pixel-unit) solid transparent; border-bottom: calc(var(--pixel-unit) * 2) solid var(--action); border-left: var(--pixel-unit) solid transparent; }
+.bunting i:nth-child(2) { border-bottom-color: var(--border); }
+
+.mountainBack,
+.mountainFront {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  clip-path: polygon(0 100%, 0 77%, 12% 77%, 12% 67%, 24% 67%, 24% 57%, 34% 57%, 34% 72%, 48% 72%, 48% 55%, 58% 55%, 58% 36%, 66% 36%, 66% 53%, 76% 53%, 76% 70%, 88% 70%, 88% 46%, 100% 46%, 100% 100%);
+}
+.mountainBack { z-index: 3; height: 70%; background: var(--border); }
+.mountainFront { z-index: 4; height: 48%; background: var(--ink-primary); clip-path: polygon(0 100%, 0 68%, 12% 68%, 12% 57%, 22% 57%, 22% 46%, 31% 46%, 31% 60%, 41% 60%, 41% 72%, 54% 72%, 54% 45%, 64% 45%, 64% 18%, 72% 18%, 72% 48%, 82% 48%, 82% 62%, 91% 62%, 91% 42%, 100% 42%, 100% 100%); }
+.ground { position: absolute; right: 0; bottom: 0; left: 0; z-index: 5; height: var(--pixel-unit); background: var(--action); }
+
+.empty .moon { right: 12%; }
+.empty .mountainFront { clip-path: polygon(0 100%, 0 74%, 16% 74%, 16% 60%, 28% 60%, 28% 47%, 37% 47%, 37% 58%, 46% 58%, 46% 68%, 59% 68%, 59% 53%, 71% 53%, 71% 42%, 80% 42%, 80% 60%, 100% 60%, 100% 100%); }
+.error .moon { background: var(--danger-on); box-shadow: calc(var(--pixel-unit) * -1) var(--pixel-unit) 0 var(--danger); }
+.error .ground { background: var(--danger); }
+.error .bunting { display: none; }
+.notFound .moon { top: 28%; right: 43%; }
+.notFound .cloud:nth-child(1) { left: -1rem; }
+.notFound .cloud:nth-child(2) { right: 4%; }
+.quiet .star:nth-child(n + 3),
+.quiet .bunting { display: none; }
+.quiet .cloud:nth-child(2) { display: none; }
+
+@media (min-width: 40rem) {
+  .scene { width: min(100%, 26rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud:nth-child(2) { transform: none; }
+}

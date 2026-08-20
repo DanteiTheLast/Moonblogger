@@ -63,10 +63,16 @@ export default async function PostPage({ params }: PostPageProps) {
   return (
     <article className={styles.post}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{post.title}</h1>
+        <Link href="/" className={styles.back}>
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M9.75 3.25 5 8l4.75 4.75M5.5 8h6.25" />
+          </svg>
+          Volver al listado
+        </Link>
         <time className={styles.date} dateTime={date}>
           {formatDate(date)}
         </time>
+        <h1 className={styles.title}>{post.title}</h1>
       </header>
       {post.media.length > 0 ? (
         <MediaCarousel
@@ -76,9 +82,6 @@ export default async function PostPage({ params }: PostPageProps) {
       ) : null}
       {/* Contenido en texto plano: se respetan los saltos de línea (pre-wrap). */}
       <div className={styles.content}>{post.content}</div>
-      <Link href="/" className={styles.back}>
-        Volver al listado
-      </Link>
     </article>
   );
 }

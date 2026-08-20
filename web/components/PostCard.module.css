@@ -3,33 +3,37 @@
 }
 
 .card {
+  height: 100%;
+}
+
+.cardLink {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  background: var(--color-surface);
-  border: var(--pixel-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+  border: var(--border-solid);
+  box-shadow: var(--shadow-hard-offset-md);
   padding: var(--space-4);
   height: 100%;
-  transition: transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
+  color: var(--ink-primary);
+  text-decoration: none;
+  transition: transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard);
 }
 
-.card:hover {
-  transform: translateY(-3px);
-  border-color: var(--color-pink);
-  box-shadow: var(--shadow-md);
+.cardLink:hover {
+  transform: translate(calc(var(--pixel-unit) * -1), calc(var(--pixel-unit) * -1));
+  box-shadow: calc(var(--pixel-unit) * 3) calc(var(--pixel-unit) * 3) 0 var(--shadow-color-strong);
+  color: var(--ink-primary);
+  text-decoration: none;
 }
 
 .thumbnailFrame {
   width: 100%;
-  height: clamp(12rem, 38vw, 22.5rem);
-  max-height: 50dvh;
+  aspect-ratio: 16 / 9;
+  max-height: 18rem;
   overflow: hidden;
-  border-radius: var(--radius-md);
-  border: var(--pixel-border);
-  background: var(--color-surface-alt);
-  box-shadow: var(--shadow-sm);
+  border: var(--border-solid);
+  background: var(--surface-soft);
 }
 
 .thumbnailImage,
@@ -38,35 +42,43 @@
   height: 100%;
 }
 
-.fallbackShape {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 2px solid var(--color-pink);
-  border-radius: 50% 40% 50% 40%;
-  transform: rotate(-25deg);
-  opacity: 0.8;
-}
-
 .thumbnailImage {
   display: block;
   object-fit: cover;
-  background: var(--color-surface-alt);
+  background: var(--surface-soft);
 }
 
 .thumbnailFallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  background: var(--color-surface-alt);
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 0 22%, var(--panel) 22% 30%, transparent 30% 100%),
+    linear-gradient(var(--surface-soft) 0 52%, var(--border) 52% 57%, var(--action) 57% 100%);
 }
 
-@media (max-width: 30rem) {
-  .thumbnailFrame {
-    height: clamp(11rem, 56vw, 17rem);
-  }
+.thumbnailFallback::before,
+.thumbnailFallback::after {
+  content: "";
+  position: absolute;
+  border: var(--border-solid);
+}
+
+.thumbnailFallback::before {
+  width: 23%;
+  aspect-ratio: 1;
+  top: 18%;
+  right: 15%;
+  background: var(--panel);
+  box-shadow: calc(var(--pixel-unit) * -2) calc(var(--pixel-unit) * 2) 0 var(--shadow-color-soft);
+}
+
+.thumbnailFallback::after {
+  width: 58%;
+  height: 48%;
+  left: -8%;
+  bottom: -19%;
+  background: var(--ink-secondary);
+  clip-path: polygon(0 100%, 0 66%, 24% 66%, 24% 45%, 43% 45%, 43% 22%, 57% 22%, 57% 49%, 76% 49%, 76% 65%, 100% 65%, 100% 100%);
 }
 
 .body {
@@ -79,19 +91,6 @@
   font-size: 1.4rem;
 }
 
-.title a {
-  color: var(--color-text);
-  display: inline-block;
-  min-height: 44px;
-  padding-block: var(--space-1);
-  transition: color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
-}
-
-.title a:hover {
-  color: var(--color-primary);
-  transform: translateX(2px);
-}
-
 .date {
   color: var(--color-text-muted);
   font-size: 0.875rem;
@@ -101,4 +100,27 @@
   color: var(--color-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-solid);
+  background: var(--action);
+  box-shadow: var(--shadow-hard-offset-sm);
+  color: var(--action-on);
+  font-weight: 700;
+  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.cardLink:hover .cta {
+  background: var(--action-hover);
+}
+
+.cardLink:active .cta {
+  transform: translate(var(--pixel-unit), var(--pixel-unit));
+  box-shadow: none;
 }

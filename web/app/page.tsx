@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { getPublishedPosts } from "@/lib/api";
 import PostCard from "@/components/PostCard";
+import PixelScene from "@/components/PixelScene";
+import RouteState from "@/components/RouteState";
 import styles from "./page.module.css";
-import KotoSprite from "@/components/KotoSprite";
 
 export const metadata: Metadata = {
   title: "MoonBlogger",
@@ -13,33 +14,50 @@ export const revalidate = 3600;
 
 export default async function HomePage() {
   let posts: Awaited<ReturnType<typeof getPublishedPosts>> = [];
+  let hasError = false;
+
   try {
     posts = await getPublishedPosts();
   } catch {
-    // Si la API no responde en build, no bloqueamos el deploy.
-    // La página se regenerará on-demand con revalidateTag.
+    hasError = true;
   }
+
+  const HeroHeading = hasError || posts.length === 0 ? "p" : "h1";
 
   return (
     <>
       <section className={styles.hero}>
-        <div><h1 className={styles.heroTitle}>MoonBlogger</h1>
-        <p className={styles.heroText}>
-          Hola, soy Moon. Aquí guardo mis publicaciones.
-        </p></div><KotoSprite variant="sitting" size="lg" />
+        <div className={styles.heroContent}>
+          <HeroHeading className={styles.heroTitle}>MoonBlogger</HeroHeading>
+          <p className={styles.heroText}>
+            Hola, soy Moon. Aquí guardo mis publicaciones.
+          </p>
+        </div>
+        <PixelScene className={styles.heroScene} variant="hero" />
       </section>
 
-      {posts.length === 0 ? (
-        <p className={styles.empty} role="status">
-          <KotoSprite variant="sleeping" size="md" />
-          Todavía no hay publicaciones.
-        </p>
+      {hasError ? (
+        <RouteState
+          title="No se pudieron cargar las publicaciones"
+          description="Comprueba tu conexión e inténtalo de nuevo."
+          variant="error"
+          action={{ label: "Reintentar", href: "/" }}
+        />
+      ) : posts.length === 0 ? (
+        <RouteState
+          title="Todavía no hay publicaciones"
+          description="Vuelve pronto para encontrar novedades."
+          variant="empty"
+        />
       ) : (
-        <ul className={styles.list}>
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </ul>
+        <section className={styles.feed} aria-labelledby="publicaciones-title">
+          <h2 id="publicaciones-title" className={styles.feedTitle}>Publicaciones</h2>
+          <ul className={styles.list}>
+            {posts.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </ul>
+        </section>
       )}
     </>
   );

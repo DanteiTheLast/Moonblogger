@@ -1,62 +1,70 @@
 .hero {
   position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-5) var(--space-4) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(120deg, var(--color-surface) 0%, var(--color-surface-alt) 100%);
-  border: var(--pixel-border);
-  box-shadow: var(--shadow-sm);
-  isolation: isolate;
-}
-
-.hero::after {
-  content: "";
-  position: absolute;
-  width: 7rem;
-  height: 7rem;
-  right: -2rem;
-  top: -3rem;
-  border: 1px solid rgb(161 61 101 / 0.22);
-  border-radius: 35% 65% 55% 45%;
-  transform: rotate(24deg);
-  z-index: -1;
-}
-
-.heroTitle {
-  font-size: 2.25rem;
-  letter-spacing: -0.02em;
-}
-
-.heroText {
-  color: var(--color-text-muted);
-  font-size: 1.125rem;
-}
-
-.empty {
-  position: relative;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-7) var(--space-5);
-  text-align: center;
-  overflow: hidden;
-}
-
-.empty :global(img) { margin: 0 auto var(--space-3); }
-
-@media (max-width: 30rem) {
-  .hero { align-items: flex-start; }
-}
-
-.list {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  padding: var(--space-5);
+  border: var(--border-solid);
+  background: var(--panel);
+  box-shadow: var(--shadow-hard-offset-md);
+}
+
+.heroContent {
+  min-width: 0;
+}
+
+.heroTitle {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+  font-size: clamp(2.25rem, 10vw, 3.75rem);
+  color: var(--ink-primary);
+}
+
+.heroText {
+  max-width: 32rem;
+  color: var(--color-text-muted);
+  font-size: 1.125rem;
+  margin-top: var(--space-2);
+}
+
+.heroScene {
+  flex: 0 1 22rem;
+  width: 100%;
+}
+
+.feed {
+  margin-top: var(--space-7);
+}
+
+.feedTitle {
+  font-size: 1.75rem;
+  margin-bottom: var(--space-4);
+}
+
+.list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
   padding: 0;
+}
+
+@media (min-width: 42rem) {
+  .hero {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-6);
+  }
+
+  .heroContent {
+    flex: 1 1 50%;
+  }
+
+  .heroScene {
+    width: min(45%, 26rem);
+  }
+
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

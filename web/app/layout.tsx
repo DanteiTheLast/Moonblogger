@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Baloo_2, Nunito } from "next/font/google";
+import Script from "next/script";
+import { Nunito, Pixelify_Sans } from "next/font/google";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import VisitTracker from "@/components/VisitTracker";
@@ -11,8 +12,8 @@ const nunito = Nunito({
   subsets: ["latin"],
 });
 
-const baloo = Baloo_2({
-  variable: "--font-baloo",
+const pixelifySans = Pixelify_Sans({
+  variable: "--font-pixelify-sans",
   subsets: ["latin"],
 });
 
@@ -23,13 +24,28 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es" className={`${nunito.variable} ${baloo.variable}`}>
+    <html
+      lang="es"
+      className={`${nunito.variable} ${pixelifySans.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <Script id="theme-initializer" strategy="beforeInteractive">
+          {`try {
+            var storedTheme = localStorage.getItem("moonblogger-theme");
+            var theme = storedTheme === "light" || storedTheme === "dark"
+              ? storedTheme
+              : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+            document.documentElement.dataset.theme = theme;
+          } catch (_) {}`}
+        </Script>
+      </head>
       <body>
-        <a href="#main-content" className={styles.skipLink}>
+        <a href="#main-content" className="skipLink">
           Saltar al contenido
         </a>
-         <Header />
-         <VisitTracker />
+        <Header />
+        <VisitTracker />
         <main id="main-content" className={styles.main}>
           {children}
         </main>

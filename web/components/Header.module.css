@@ -1,13 +1,13 @@
 .header {
-  position: relative;
-  background: var(--color-surface);
-  border-bottom: var(--pixel-border);
-  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+  border-bottom: var(--border-solid);
+  box-shadow: var(--shadow-hard-offset-sm);
   overflow: hidden;
 }
 
 .inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
@@ -16,30 +16,69 @@
   padding: var(--space-3) var(--space-4);
 }
 
-/* Slot para la mascota sprite (pixel art, etapa futura). Se mantiene vacío. */
-.mascotSlot {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  border: var(--pixel-border);
+.trailMarker {
   position: relative;
+  width: 44px;
+  height: 44px;
+  border: var(--border-solid);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-hard-offset-sm);
+}
+
+.trailMarker::before {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: var(--space-2);
+  height: var(--space-2);
+  background: var(--action);
+  box-shadow: calc(0px - var(--space-1)) var(--space-1) 0 var(--action);
+  content: "";
+}
+
+.trailMarker::after {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  width: var(--space-2);
+  height: var(--space-2);
+  background: var(--ink-secondary);
+  box-shadow:
+    calc(0px - var(--space-1)) var(--space-1) 0 var(--ink-secondary),
+    calc(0px - var(--space-2)) var(--space-2) 0 var(--ink-secondary),
+    calc(0px - var(--space-3)) var(--space-3) 0 var(--ink-secondary),
+    calc(0px - var(--space-4)) var(--space-4) 0 var(--ink-secondary),
+    calc(0px - var(--space-4) - var(--space-1)) var(--space-4) 0 var(--ink-secondary),
+    calc(0px - var(--space-5)) var(--space-4) 0 var(--ink-secondary);
+  content: "";
 }
 
 .brand {
   font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--color-text);
-  min-height: 48px;
+  color: var(--ink-primary);
+  min-width: 0;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
+  overflow-wrap: anywhere;
   transition: color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
 }
 
 .brand:hover {
-  color: var(--color-primary);
+  color: var(--action);
   text-decoration: none;
   transform: translateX(2px);
+}
+
+@media (max-width: 26rem) {
+  .inner {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .inner > :last-child {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
 }

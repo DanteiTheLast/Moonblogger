@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import styles from "./error.module.css";
-import KotoSprite from "@/components/KotoSprite";
+import RouteState from "@/components/RouteState";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -15,15 +14,12 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   }, [error]);
 
   return (
-    <div className={styles.wrap} role="alert">
-      <KotoSprite variant="sleeping" size="lg" />
-      <h1 className={styles.title}>Algo salió mal</h1>
-      <p className={styles.text}>
-        No pudimos cargar las publicaciones. Inténtalo de nuevo en un momento.
-      </p>
-      <button type="button" onClick={reset} className={styles.button}>
-        Reintentar
-      </button>
-    </div>
+    <RouteState
+      variant="error"
+      title="Algo salió mal"
+      description="No pudimos cargar las publicaciones. Inténtalo de nuevo en un momento."
+      announceError
+      action={{ label: "Reintentar", onClick: reset }}
+    />
   );
 }

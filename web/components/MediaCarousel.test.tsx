@@ -66,7 +66,13 @@ describe("MediaCarousel UI", () => {
     expect(markup).toContain('aria-roledescription="carrusel"');
     expect(markup).toContain('alt="Una luna rosa"');
     expect(markup).toContain('aria-label="Elemento anterior"');
+    expect(markup).toContain('aria-label="Elemento siguiente"');
+    expect(markup).toContain('aria-current="true"');
+    expect(markup).toContain("Elemento 1 de 2");
     expect(markup).toContain("Luna llena");
+    expect(markup).toContain("<svg");
+    expect(markup).not.toContain("‹");
+    expect(markup).not.toContain("›");
   });
 
   it("renderiza vídeo con controles, póster y precarga de metadatos", () => {
@@ -80,5 +86,6 @@ describe("MediaCarousel UI", () => {
     expect(markup).toContain('preload="metadata"');
     expect(markup).toContain('poster="https://project.supabase.co/storage/v1/object/public/media/night.jpg"');
     expect(markup).toContain('type="video/mp4"');
+    expect(markup).toContain('aria-label="Vídeo de la noche"');
   });
 });

@@ -2,27 +2,28 @@
 
 * {
   box-sizing: border-box;
-  padding: 0;
   margin: 0;
+  padding: 0;
 }
 
 html {
   height: 100%;
+  background: var(--canvas);
 }
 
 body {
   min-height: 100%;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--canvas);
+  color: var(--ink-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
-  background-image: radial-gradient(var(--color-border) 1px, transparent 1px);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
-::selection { background: var(--color-pink); color: var(--color-text); }
+::selection { background: var(--selection); color: var(--selection-text); }
 
 h1,
 h2,
@@ -38,24 +39,51 @@ p {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--action);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--color-primary-hover);
+  color: var(--action-hover);
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 
-button, [role="button"] { border: var(--pixel-border); border-radius: 6px; box-shadow: var(--shadow-sm); min-height: 44px; cursor: pointer; }
-button:active, [role="button"]:active { transform: translate(3px, 3px); box-shadow: none; }
+button,
+[role="button"] {
+  min-height: 44px;
+  border: var(--border-solid);
+  border-radius: var(--radius-none);
+  box-shadow: var(--shadow-hard-offset-sm);
+  cursor: pointer;
+}
 
-/* Foco visible, coherente en toda la web */
+button:active,
+[role="button"]:active {
+  transform: translate(var(--pixel-unit), var(--pixel-unit));
+  box-shadow: none;
+}
+
+.skipLink {
+  position: absolute;
+  top: -100%;
+  left: var(--layout-gutter);
+  z-index: 10;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--action);
+  box-shadow: var(--shadow-hard-offset-md);
+  font-weight: 700;
+}
+
+.skipLink:focus-visible {
+  top: var(--space-3);
+}
+
 :focus-visible {
-  outline: 3px solid var(--color-focus);
-  outline-offset: 3px;
-  border-radius: 0.375rem;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* Objetivos táctiles accesibles */
