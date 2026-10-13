@@ -99,5 +99,5 @@ jobs:
       - name: Set up Android SDK tools
         uses: android-actions/setup-android@v4
       - name: Ensure compile SDK is available
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
