@@ -143,3 +143,11 @@ crear un duplicado al reintentar: eliminar esa incertidumbre necesita una clave
 de idempotencia compartida con la API. La recuperación del editor con datos y
 fotos reales, TalkBack y restauración tras matar el proceso requiere verificación
 en dispositivo; los tests JVM cubren la lógica y los archivos privados aislados.
+
+## Preparación de imágenes
+
+El editor acepta JPEG, PNG y WebP estáticos de hasta 32 MiB como entrada. Antes de subir, procesa una copia privada a un máximo de 2560 px en el lado mayor, sin ampliar imágenes pequeñas. Usa JPEG de calidad 88 para imágenes opacas y PNG sin pérdidas cuando hay transparencia real. La re-codificación elimina los metadatos, incluida la ubicación, y aplica las ocho orientaciones EXIF. No modifica el archivo original del teléfono.
+
+La API sigue recibiendo un máximo de 8 MiB por imagen: si una salida PNG con transparencia supera ese límite, se rechaza con un mensaje visible; no se aplana ni se sube el original. Tampoco se convierten animaciones a una primera imagen. Los bytes y dimensiones del intento de subida corresponden al archivo final optimizado.
+
+Las pruebas `PhotoOptimizerTest` usan gráficos nativos de Robolectric para ejercitar los codecs Android, orientación, transparencia y limpieza de temporales. No sustituyen la comprobación de rendimiento y memoria en teléfonos reales.

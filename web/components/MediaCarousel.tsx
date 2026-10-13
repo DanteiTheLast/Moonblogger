@@ -1,6 +1,7 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- Supabase no tiene host configurado para next/image. */
+import Image, { getImageProps } from "next/image";
+import { GALLERY_SIZES, IMAGE_QUALITY } from "@/lib/images";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CarouselTransition, PostMedia } from "@/lib/types";
 import {
@@ -53,6 +54,9 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
   }
 
   const mediaUrl = activeItem.url ?? undefined;
+  const poster = activeItem.poster_url ? getImageProps({
+    src: activeItem.poster_url, alt: "", width: 640, height: 360, quality: IMAGE_QUALITY,
+  }).props.src : undefined;
   const isUnavailable = failedMediaIds.has(activeItem.id) || !mediaUrl;
   const accessibleName =
     activeItem.alt_text ||
@@ -83,13 +87,13 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
               No se pudo cargar este {activeItem.kind === "video" ? "vídeo" : "recurso"}.
             </div>
           ) : activeItem.kind === "image" ? (
-            // Las URLs son públicas de Supabase; <img> evita configurar hosts remotos en Next.
-            <img
+            <Image
               className={styles.media}
-              src={mediaUrl}
+              src={mediaUrl!}
               alt={accessibleName}
-              width={activeItem.width ?? undefined}
-              height={activeItem.height ?? undefined}
+              fill
+              sizes={GALLERY_SIZES}
+              quality={IMAGE_QUALITY}
               onError={() => markMediaAsFailed(activeItem.id)}
             />
           ) : (
@@ -99,7 +103,7 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
               controls
               playsInline
               preload="metadata"
-              poster={activeItem.poster_url ?? undefined}
+              poster={poster}
               aria-label={accessibleName}
               onError={() => markMediaAsFailed(activeItem.id)}
             >

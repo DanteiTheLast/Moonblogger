@@ -1,7 +1,6 @@
 package com.moonblogger.app.data.media
 
 import android.content.ContentResolver
-import android.graphics.BitmapFactory
 import android.net.Uri
 import java.io.File
 
@@ -34,6 +33,7 @@ enum class PhotoRejectionReason {
     FILE_TOO_LARGE,
     UNSUPPORTED_IMAGE_FORMAT,
     INVALID_IMAGE,
+    OPTIMIZATION_FAILED,
     SOURCE_UNREADABLE,
 }
 
@@ -120,20 +120,31 @@ class PhotoSourceProvider(
             deleteTemporaryFile(file)
             return PhotoInspection.Rejected(PhotoRejectionReason.UNSUPPORTED_IMAGE_FORMAT)
         }
-        val dimensions = dimensions(file)
-        if (dimensions == null) {
+        val optimized = try {
+            val output = synchronized(temporaryFilesLock) {
+                File.createTempFile(TEMP_FILE_PREFIX, TEMP_FILE_SUFFIX, file.parentFile).also { temporaryFiles += it }
+            }
+            try {
+                PhotoOptimizer.optimize(file, output)
+            } catch (failure: Exception) {
+                deleteTemporaryFile(output)
+                throw failure
+            } catch (failure: OutOfMemoryError) {
+                deleteTemporaryFile(output)
+                throw failure
+            }
+        } catch (failure: PhotoOptimizationException) {
             deleteTemporaryFile(file)
-            return PhotoInspection.Rejected(PhotoRejectionReason.INVALID_IMAGE)
+            return PhotoInspection.Rejected(failure.reason)
+        } catch (_: Exception) {
+            deleteTemporaryFile(file)
+            return PhotoInspection.Rejected(PhotoRejectionReason.OPTIMIZATION_FAILED)
+        } catch (_: OutOfMemoryError) {
+            deleteTemporaryFile(file)
+            return PhotoInspection.Rejected(PhotoRejectionReason.OPTIMIZATION_FAILED)
         }
-        return PhotoInspection.Accepted(
-            InspectedPhoto(
-                localFile = file,
-                mimeType = format.mimeType,
-                sizeBytes = temporaryFile.sizeBytes,
-                width = dimensions.first,
-                height = dimensions.second,
-            ),
-        )
+        deleteTemporaryFile(file)
+        return PhotoInspection.Accepted(optimized)
     }
 
     /** Abre la URI de origen una sola vez y transfiere sus bytes por bloques. */
@@ -144,7 +155,7 @@ class PhotoSourceProvider(
         temporaryFiles += file
         try {
             val result = contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().buffered().use { output -> copyPhotoStream(input, output) }
+                file.outputStream().buffered().use { output -> copyPhotoStream(input, output, MAX_PHOTO_INPUT_BYTES) }
             } ?: return@synchronized deleteAndReturn(file, TemporaryCopyResult.Unreadable)
             when (result) {
                 is PhotoCopyResult.Copied -> TemporaryCopyResult.Copied(file, result.bytes)
@@ -163,16 +174,6 @@ class PhotoSourceProvider(
     private fun deleteTemporaryFile(file: File) {
         synchronized(temporaryFilesLock) {
             if (file.delete() || !file.exists()) temporaryFiles.remove(file)
-        }
-    }
-
-    private fun dimensions(file: File): Pair<Int, Int>? {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, options)
-        return if (options.outWidth > 0 && options.outHeight > 0) {
-            options.outWidth to options.outHeight
-        } else {
-            null
         }
     }
 

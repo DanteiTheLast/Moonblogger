@@ -8,8 +8,20 @@ const nextConfig: NextConfig = {
   // Sin `output: 'export'`, Next usa funciones serverless en Vercel
   // para servir ISR y API routes.
   images: {
-    // Con ISR en Vercel, Image Optimization está disponible.
-    // Se mantiene `unoptimized: false` (valor por defecto).
+    // Solo archivos del bucket público del proyecto, nunca uploads privados.
+    remotePatterns: [{
+      protocol: "https",
+      hostname: "zubconvayinjmnbqqxla.supabase.co",
+      port: "",
+      pathname: "/storage/v1/object/public/moonblogger-public/**",
+      search: "",
+    }],
+    qualities: [88],
+    deviceSizes: [320, 640, 750, 1080, 1280, 1440],
+    formats: ["image/webp"],
+    maximumRedirects: 0,
+    // El Cache-Control de origen puede prolongar este mínimo.
+    minimumCacheTTL: 60,
   },
 };
 

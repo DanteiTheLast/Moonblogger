@@ -89,8 +89,8 @@ android {
         applicationId = "com.moonblogger.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -134,6 +134,8 @@ android {
         }
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrlDebug\"")
@@ -175,6 +177,7 @@ dependencies {
     // Almacenamiento cifrado de tokens (EncryptedSharedPreferences, 1.1.0).
     // NOTA: la librería está deprecada upstream (ver android/README.md, D7).
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.exifinterface)
 
     // Red / serialización
     implementation(libs.retrofit)
@@ -185,6 +188,7 @@ dependencies {
 
     // Tests JVM (unitarios)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver3)
 

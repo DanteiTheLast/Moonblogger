@@ -75,3 +75,9 @@ Primera estabilización de editor/sesión Android, publicación/retirada de foto
 archivo paginado, errores ISR, reflujo, readiness, backups de objetos y CI.
 No confundir cambios locales con despliegue: consultar stabilization.md para
 validación, contratos ajustados, límites y estado de producción.
+
+## Optimización de imágenes — 13/10/2026
+
+Preparación de fotos antes de subir en Android y entrega adaptativa en Next.js.
+Ver [política, comprobaciones y límites](image-optimization.md). El APK anterior
+no cambia por desplegar la web; se requiere actualizar la aplicación Android.

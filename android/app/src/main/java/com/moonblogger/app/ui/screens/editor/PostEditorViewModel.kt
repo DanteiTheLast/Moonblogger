@@ -438,10 +438,11 @@ class PostEditorViewModel(
         omittedForCapacity: Int,
     ): String? {
         val messages = buildList {
-            if (PhotoRejectionReason.FILE_TOO_LARGE in rejections) add("Algunas fotos superan el límite de 8 MiB.")
+            if (PhotoRejectionReason.FILE_TOO_LARGE in rejections) add("Algunas fotos superan el límite de entrada de 32 MiB.")
+            if (PhotoRejectionReason.OPTIMIZATION_FAILED in rejections) add("No se pudo optimizar alguna foto al límite de 8 MiB. Prueba con una imagen más pequeña.")
             if (PhotoRejectionReason.EMPTY_FILE in rejections) add("Algunas fotos seleccionadas están vacías.")
             if (PhotoRejectionReason.UNSUPPORTED_IMAGE_FORMAT in rejections) {
-                add("Algunas fotos no son JPEG, PNG ni WebP válidas.")
+                add("Algunas fotos usan un formato no admitido o tienen animación. Elige JPEG, PNG o WebP estáticos.")
             }
             if (PhotoRejectionReason.INVALID_IMAGE in rejections) {
                 add("Algunas fotos no tienen dimensiones de imagen válidas.")

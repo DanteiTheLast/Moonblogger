@@ -204,7 +204,7 @@ fun PostEditorScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "Añade JPEG, PNG o WebP de hasta 8 MiB. Los vídeos aún no están disponibles.",
+                        text = "Añade JPEG, PNG o WebP estáticos de hasta 32 MiB. Optimizamos las fotos a 2560 px sin modificar los originales. Los vídeos aún no están disponibles.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

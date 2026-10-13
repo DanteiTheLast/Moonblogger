@@ -224,3 +224,16 @@ volumen y preservar agregación básica.
   ni idempotencia de POST creación cuando se pierde la respuesta.
 - Este registro supera los detalles anteriores que reiniciaban published_at,
   reutilizaban claves públicas, presupuestaban 280 s o asumían autorreanudar Supabase.
+
+## D15 — Preparación y entrega de imágenes (13/10/2026)
+
+Se prepara una copia en Android antes de solicitar el upload intent: lado mayor
+2560, JPEG calidad 88 para contenido opaco y PNG para transparencia, orientación
+normalizada y sin metadatos del original. El archivo de origen del teléfono no
+se modifica. El límite de entrada es distinto del límite API de 8 MiB.
+
+La web usa next/image con tamaños adaptativos y una allowlist del bucket público
+exacto. No se añade un procesador de imágenes en Django ni otro servicio; se
+conserva el contrato existente. La caché del optimizador puede retener copias
+públicas después de retirar contenido y consume cuota del proveedor existente.
+Las imágenes almacenadas no se migran ni se eliminan.

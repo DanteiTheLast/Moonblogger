@@ -25,6 +25,7 @@
 }
 
 .mediaFrame {
+  position: relative;
   width: 100%;
   max-height: min(70vh, 42rem);
   overflow: hidden;

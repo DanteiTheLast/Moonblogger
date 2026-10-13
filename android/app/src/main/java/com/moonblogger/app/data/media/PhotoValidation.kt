@@ -4,6 +4,10 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Locale
 
+const val MAX_PHOTO_INPUT_BYTES = 32L * 1024 * 1024
+const val MAX_PHOTO_SIDE = 2560
+const val MAX_SOURCE_PHOTO_PIXELS = 100_000_000L
+
 const val MAX_PHOTO_BYTES = 8L * 1024 * 1024
 
 /** El resultado evita confundir un stream que supera el límite con uno ilegible. */
@@ -111,3 +115,56 @@ private val PNG_SIGNATURE = byteArrayOf(
 )
 private val RIFF_SIGNATURE = "RIFF".encodeToByteArray()
 private val WEBP_SIGNATURE = "WEBP".encodeToByteArray()
+
+/** Inspect container chunks, not compressed pixel bytes (which can coincidentally spell ANIM). */
+internal fun isAnimatedPhoto(file: java.io.File): Boolean = file.inputStream().buffered().use { input ->
+    val header = input.readPhotoBytes(12)
+    val format = detectPhotoFormat(header)
+    if (format != PhotoFormat.PNG && format != PhotoFormat.WEBP) return@use false
+    if (format == PhotoFormat.PNG) {
+        // PNG has an eight-byte signature: reopen at its first chunk.
+        return@use file.inputStream().buffered().use pngChunks@ { png ->
+            png.skipPhotoBytes(8)
+            while (true) {
+                val chunk = png.readPhotoBytes(8)
+                if (chunk.size != 8) break
+                val length = java.nio.ByteBuffer.wrap(chunk, 0, 4).int.toLong() and 0xffffffffL
+                val type = String(chunk, 4, 4, Charsets.US_ASCII)
+                if (type == "acTL") return@pngChunks true
+                if (type == "IEND") break
+                png.skipPhotoBytes(length + 4)
+            }
+            false
+        }
+    }
+    while (true) {
+        val chunk = input.readPhotoBytes(8)
+        if (chunk.size != 8) break
+        val type = String(chunk, 0, 4, Charsets.US_ASCII)
+        val length = java.nio.ByteBuffer.wrap(chunk, 4, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xffffffffL
+        if (type == "ANIM" || type == "ANMF") return@use true
+        input.skipPhotoBytes(length + length % 2)
+    }
+    false
+}
+
+private fun InputStream.readPhotoBytes(size: Int): ByteArray {
+    val bytes = ByteArray(size)
+    var offset = 0
+    while (offset < size) {
+        val count = read(bytes, offset, size - offset)
+        if (count < 0) break
+        if (count == 0) continue
+        offset += count
+    }
+    return bytes.copyOf(offset)
+}
+private fun InputStream.skipPhotoBytes(length: Long) {
+    var remaining = length
+    while (remaining > 0) {
+        val skipped = skip(remaining)
+        if (skipped > 0) remaining -= skipped
+        else if (read() >= 0) remaining--
+        else throw java.io.EOFException("Incomplete image container")
+    }
+}

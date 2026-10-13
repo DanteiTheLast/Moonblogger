@@ -21,7 +21,7 @@ const IMAGE: PostMedia = {
   duration_seconds: null,
   alt_text: "Una luna rosa",
   caption: "Luna llena",
-  url: "https://project.supabase.co/storage/v1/object/public/media/moon.webp",
+  url: "https://zubconvayinjmnbqqxla.supabase.co/storage/v1/object/public/moonblogger-public/moon.webp",
   poster_url: null,
 };
 
@@ -36,8 +36,8 @@ const VIDEO: PostMedia = {
   duration_seconds: 12,
   alt_text: "Vídeo de la noche",
   caption: "",
-  url: "https://project.supabase.co/storage/v1/object/public/media/night.mp4",
-  poster_url: "https://project.supabase.co/storage/v1/object/public/media/night.jpg",
+  url: "https://zubconvayinjmnbqqxla.supabase.co/storage/v1/object/public/moonblogger-public/night.mp4",
+  poster_url: "https://zubconvayinjmnbqqxla.supabase.co/storage/v1/object/public/moonblogger-public/night.jpg",
 };
 
 describe("MediaCarousel logic", () => {
@@ -66,6 +66,10 @@ describe("MediaCarousel UI", () => {
 
     expect(markup).toContain('aria-roledescription="carrusel"');
     expect(markup).toContain('alt="Una luna rosa"');
+    expect(markup).toContain('srcSet="/_next/image?url=');
+    expect(markup).toContain('sizes="(min-width: 42rem) 640px, calc(100vw - 96px)"');
+    expect(markup).toContain("&amp;q=88");
+    expect(markup).not.toContain('src="' + IMAGE.url + '"');
     expect(markup).toContain('aria-label="Elemento anterior"');
     expect(markup).toContain('aria-label="Elemento siguiente"');
     expect(markup).toContain('aria-current="true"');
@@ -85,7 +89,8 @@ describe("MediaCarousel UI", () => {
     expect(markup).toContain("controls");
     expect(markup).toContain('playsInline=""');
     expect(markup).toContain('preload="metadata"');
-    expect(markup).toContain('poster="https://project.supabase.co/storage/v1/object/public/media/night.jpg"');
+    expect(markup).toContain('poster="/_next/image?url=');
+    expect(markup).toContain("night.jpg&amp;w=1280&amp;q=88");
     expect(markup).toContain('type="video/mp4"');
     expect(markup).toContain('aria-label="Vídeo de la noche"');
   });
