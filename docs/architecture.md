@@ -31,10 +31,11 @@ Vercel Hobby (ISR + revalidateTag)
 ```
 
 - API: **Render Free**, contenedor desde `backend/Dockerfile` (Blueprint
-  `render.yaml`), health check en `/api/v1/health/`, spin-down tras 15 min sin
+  `render.yaml`), readiness de BD en `/api/v1/ready/` (liveness: `/api/v1/health/`), spin-down tras 15 min sin
   tráfico (cold start ~30-60 s), límite 750 h/mes.
 - BD: **Supabase Free** (session pooler `aws-<region>.pooler.supabase.com:5432`),
-  `sslmode=require`; sin backups automáticos → `scripts/backup.sh`.
+  `sslmode=require`; backups de BD: `scripts/backup.sh`; objetos: comando
+  `backup_media_storage`.
 - Web: **Vercel Hobby**, **ISR (Incremental Static Regeneration)** con `revalidate = 3600` y `tags: ['posts']`. Invalidación bajo demanda vía webhook `POST /api/revalidate` (firmado con `REVALIDATE_SECRET`). El rebuild vía Deploy Hook ya no es necesario para actualizar contenido; solo para cambios de código.
 - Android: APK release firmado de instalación directa; keystore local.
 - Media: **Supabase Storage** con signed upload URLs (no proxy en API), claves

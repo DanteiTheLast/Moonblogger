@@ -47,6 +47,15 @@ object JwtDecoder {
         return (root["exp"] as? JsonPrimitive)?.longOrNull
     }
 
+    /** Identity for local draft isolation, never used to authorize API requests. */
+    fun userId(token: String?): String? = try {
+        val payload = token?.split('.')?.getOrNull(1)
+        payload?.let {
+            (json.parseToJsonElement(Base64.getUrlDecoder().decode(padBase64(it)).decodeToString())
+                .jsonObject["user_id"] as? JsonPrimitive)?.content
+        }
+    } catch (_: Exception) { null }
+
     private fun padBase64(value: String): String {
         val rem = value.length % 4
         return if (rem == 0) value else value + "=".repeat(4 - rem)

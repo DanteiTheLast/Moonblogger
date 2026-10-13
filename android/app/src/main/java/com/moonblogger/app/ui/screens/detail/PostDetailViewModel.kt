@@ -57,6 +57,8 @@ class PostDetailViewModel(
     }
 
     fun delete() {
+        if (_uiState.value.isDeleting) return
+        _uiState.update { it.copy(isDeleting = true) }
         viewModelScope.launch {
             _uiState.update { it.copy(isDeleting = true, error = null) }
             repository.deletePost(postId)

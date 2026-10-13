@@ -8,56 +8,57 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 
-/**
- * Coordina el refresco del access token con "single-flight": ante múltiples
- * peticiones 401 simultáneas solo se lanza UNA llamada a /auth/refresh/ y el
- * resto espera al mismo resultado.
- *
- * El refresh se ROTA en el backend (SimpleJWT): la respuesta trae un refresh
- * nuevo, que se persiste aquí mismo.
- *
- * Si el refresh falla se devuelve false; la decisión de cerrar sesión la toma
- * el llamador (ver [com.moonblogger.app.network.TokenAuthenticator] y
- * [SessionManager]).
- */
+/** A network failure is recoverable; only a rejected refresh invalidates the session. */
+enum class RefreshResult { SUCCESS, INVALID, TRANSIENT, SESSION_CHANGED }
+
 class AuthRefresher(
     private val tokenStore: TokenStore,
     private val authApi: AuthApi,
     private val scope: CoroutineScope,
 ) {
-
     private val lock = Mutex()
-    private var inFlight: Deferred<Boolean>? = null
+    private var inFlight: Deferred<RefreshResult>? = null
 
-    /**
-     * Devuelve true si el access token se ha renovado (y persistido).
-     * Concurrente-seguro: todas las llamadas simultáneas comparten un único
-     * refresh en curso.
-     */
-    suspend fun refreshAccessToken(): Boolean {
+    suspend fun refreshAccessToken(): RefreshResult {
         val deferred = lock.withLock {
-            inFlight ?: scope.async { doRefresh() }.also { inFlight = it }
+            inFlight?.takeUnless { it.isCompleted } ?: scope.async { doRefresh() }.also { inFlight = it }
         }
         return try {
             deferred.await()
         } finally {
-            lock.withLock {
-                if (inFlight === deferred) inFlight = null
-            }
+            lock.withLock { if (inFlight === deferred && deferred.isCompleted) inFlight = null }
         }
     }
 
-    private suspend fun doRefresh(): Boolean {
-        val refreshToken = tokenStore.refreshToken ?: return false
+    private suspend fun doRefresh(): RefreshResult {
+        val refreshToken = synchronized(tokenStore) { tokenStore.refreshToken }
+            ?: return RefreshResult.SESSION_CHANGED
         return try {
             val response = authApi.refresh(RefreshRequest(refreshToken))
-            tokenStore.saveTokens(response.access, response.refresh)
-            true
+            synchronized(tokenStore) {
+                if (tokenStore.refreshToken != refreshToken) {
+                    RefreshResult.SESSION_CHANGED
+                } else {
+                    tokenStore.saveTokens(response.access, response.refresh)
+                    RefreshResult.SUCCESS
+                }
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
-            false
+        } catch (e: Exception) {
+            // SimpleJWT rejects an expired, blacklisted or invalid refresh with 401.
+            // 400, 429, 5xx and transport errors are not proof of invalid credentials.
+            if (e is HttpException && e.code() == 401) {
+                synchronized(tokenStore) {
+                    if (tokenStore.refreshToken != refreshToken) RefreshResult.SESSION_CHANGED
+                    else {
+                        tokenStore.clear()
+                        RefreshResult.INVALID
+                    }
+                }
+            } else RefreshResult.TRANSIENT
         }
     }
 }

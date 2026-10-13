@@ -43,24 +43,26 @@ class SessionManager(
 
         val access = tokenStore.accessToken
         if (access != null && JwtDecoder.isExpired(access)) {
-            val refreshed = authRefresher.refreshAccessToken()
-            if (!refreshed) {
-                // El refresh falló (token inválido/caducado): sesión local muerta.
-                tokenStore.clear()
-                _state.value = SessionState.LoggedOut
-                return
-            }
+            authRefresher.refreshAccessToken()
+            // Invalid refresh clears its own credentials; transient failures retain them.
+            // Read current tokens below, since login/logout may happen during the request.
         }
 
-        _state.value = SessionState.LoggedIn
+        synchronized(tokenStore) {
+            _state.value = if (tokenStore.hasTokens()) SessionState.LoggedIn else SessionState.LoggedOut
+        }
     }
 
-    fun onLoginSuccess(access: String, refresh: String) {
+    fun synchronizeInvalidation() = synchronized(tokenStore) {
+        if (!tokenStore.hasTokens()) _state.value = SessionState.LoggedOut
+    }
+
+    fun onLoginSuccess(access: String, refresh: String) = synchronized(tokenStore) {
         tokenStore.saveTokens(access, refresh)
         _state.value = SessionState.LoggedIn
     }
 
-    fun logout() {
+    fun logout() = synchronized(tokenStore) {
         tokenStore.clear()
         _state.value = SessionState.LoggedOut
     }

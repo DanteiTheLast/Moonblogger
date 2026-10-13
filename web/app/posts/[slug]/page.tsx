@@ -40,8 +40,9 @@ export async function generateMetadata({
       title: post.title,
       description: post.content.slice(0, 160),
     };
-  } catch {
-    return { title: "Publicación no encontrada" };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return { title: "Publicación no encontrada" };
+    throw error;
   }
 }
 

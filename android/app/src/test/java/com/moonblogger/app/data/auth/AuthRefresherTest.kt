@@ -59,7 +59,7 @@ class AuthRefresherTest {
 
         val result = refresher.refreshAccessToken()
 
-        assertTrue(result)
+        assertEquals(RefreshResult.SUCCESS, result)
         assertEquals("new-access", tokenStore.accessToken)
         assertEquals("new-refresh", tokenStore.refreshToken)
 
@@ -69,22 +69,22 @@ class AuthRefresherTest {
     }
 
     @Test
-    fun `refresh failure returns false and keeps tokens`() = runBlocking {
+    fun `rejected refresh invalidates tokens`() = runBlocking {
         server.enqueue(jsonResponse(401, """{"detail":"Token is invalid or expired"}"""))
         tokenStore.saveTokens(access = "expired", refresh = "bad-refresh")
 
         val result = refresher.refreshAccessToken()
 
-        assertFalse(result)
-        assertEquals("expired", tokenStore.accessToken)
-        assertEquals("bad-refresh", tokenStore.refreshToken)
+        assertEquals(RefreshResult.INVALID, result)
+        assertEquals(null, tokenStore.accessToken)
+        assertEquals(null, tokenStore.refreshToken)
     }
 
     @Test
-    fun `refresh without stored token returns false without network`() = runBlocking {
+    fun `refresh without stored token does not call network`() = runBlocking {
         val result = refresher.refreshAccessToken()
 
-        assertFalse(result)
+        assertEquals(RefreshResult.SESSION_CHANGED, result)
         assertEquals(0, server.requestCount)
     }
 
@@ -95,7 +95,7 @@ class AuthRefresherTest {
 
         val results = (1..8).map { async { refresher.refreshAccessToken() } }.awaitAll()
 
-        assertTrue(results.all { it })
+        assertTrue(results.all { it == RefreshResult.SUCCESS })
         assertEquals(1, server.requestCount)
         assertEquals("new-access", tokenStore.accessToken)
     }
@@ -104,11 +104,74 @@ class AuthRefresherTest {
     fun `failed refresh is not cached`() = runBlocking {
         server.enqueue(jsonResponse(401, """{"detail":"invalid"}"""))
         tokenStore.saveTokens(access = "expired", refresh = "bad-refresh")
-        assertFalse(refresher.refreshAccessToken())
+        assertEquals(RefreshResult.INVALID, refresher.refreshAccessToken())
 
+        tokenStore.saveTokens("expired", "bad-refresh")
         // Un segundo intento vuelve a llamar a la red (no se cachea el fallo).
         server.enqueue(jsonResponse(200, """{"access":"ok-access","refresh":"ok-refresh"}"""))
-        assertTrue(refresher.refreshAccessToken())
+        assertEquals(RefreshResult.SUCCESS, refresher.refreshAccessToken())
         assertEquals(2, server.requestCount)
     }
+    @Test
+    fun `server outage preserves tokens and initialization stays logged in`() = runBlocking {
+        server.enqueue(jsonResponse(503, "{}"))
+        val expired = com.moonblogger.app.testutil.TestJwt.withExp(1)
+        tokenStore.saveTokens(expired, "refresh")
+        val session = SessionManager(tokenStore, refresher)
+        session.initialize()
+        assertEquals(SessionState.LoggedIn, session.state.value)
+        assertEquals("refresh", tokenStore.refreshToken)
+    }
+
+    @Test
+    fun `refresh response cannot repopulate tokens after logout`() = runBlocking {
+        tokenStore.saveTokens("old", "refresh")
+        val received = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): mockwebserver3.MockResponse {
+                received.countDown()
+                check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                return jsonResponse(200, """{"access":"new","refresh":"rotated"}""")
+            }
+        }
+        val session = SessionManager(tokenStore, refresher)
+        val pending = async(kotlinx.coroutines.Dispatchers.IO) { refresher.refreshAccessToken() }
+        assertTrue(received.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        session.logout()
+        release.countDown()
+        assertEquals(RefreshResult.SESSION_CHANGED, pending.await())
+        assertFalse(tokenStore.hasTokens())
+        assertEquals(SessionState.LoggedOut, session.state.value)
+    }
+
+    @Test
+    fun `cancelling one waiter cannot launch a second rotating refresh`() = runBlocking {
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val api = object : AuthApi {
+            override suspend fun login(body: com.moonblogger.app.data.model.LoginRequest): com.moonblogger.app.data.model.TokenResponse = error("No login")
+            override suspend fun refresh(body: com.moonblogger.app.data.model.RefreshRequest): com.moonblogger.app.data.model.TokenResponse {
+                calls++
+                started.complete(Unit)
+                release.await()
+                return com.moonblogger.app.data.model.TokenResponse("new", "rotated")
+            }
+        }
+        val applicationJob = SupervisorJob()
+        val shared = AuthRefresher(tokenStore, api, CoroutineScope(applicationJob + Dispatchers.Unconfined))
+        tokenStore.saveTokens("old", "refresh")
+        val first = async { shared.refreshAccessToken() }
+        started.await()
+        first.cancel()
+        first.join()
+        val second = async { shared.refreshAccessToken() }
+        kotlinx.coroutines.yield()
+        assertEquals(1, calls)
+        release.complete(Unit)
+        assertEquals(RefreshResult.SUCCESS, second.await())
+        applicationJob.cancel()
+    }
+
 }

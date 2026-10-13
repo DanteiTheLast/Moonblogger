@@ -9,7 +9,7 @@ services:
     runtime: docker
     rootDir: backend
     plan: free
-    healthCheckPath: /api/v1/health/
+    healthCheckPath: /api/v1/ready/
     envVars:
       - key: DJANGO_DEBUG
         value: "false"

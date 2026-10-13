@@ -34,6 +34,7 @@ def create_post(author, title, content="Contenido", **kwargs):
 
 class AuthAPITests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user("moon", password="pass1234")
 
     def test_login_returns_tokens(self):
@@ -167,12 +168,12 @@ class PrivatePostAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIsNotNone(resp.data["published_at"])
 
-    def test_unpublish_clears_published_at(self):
+    def test_unpublish_preserves_published_at(self):
         post = create_post(self.user, title="Publicado", status="published")
         self.assertIsNotNone(post.published_at)
         resp = self.client.patch(f"/api/v1/posts/{post.id}/", {"status": "draft"})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIsNone(resp.data["published_at"])
+        self.assertEqual(resp.data["published_at"], post.published_at.isoformat().replace("+00:00", "Z"))
 
     def test_update_title_keeps_slug(self):
         post = create_post(self.user, title="Titulo original")
@@ -468,7 +469,7 @@ class FakeStorage:
     def get_object_info(self, bucket, key):
         return self.info[(bucket, key)]
 
-    def promote(self, key):
+    def promote(self, key, destination_key=None):
         self.promoted.append(key)
 
     def delete(self, bucket, key):
@@ -1091,7 +1092,8 @@ class MediaAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.storage.promoted, [media.private_object_key])
         media.refresh_from_db()
-        self.assertEqual(media.public_object_key, media.private_object_key)
+        self.assertNotEqual(media.public_object_key, media.private_object_key)
+        self.assertTrue(media.public_object_key.startswith("publications/"))
         failed_post = create_post(self.user, "Falla")
         self.ready_media(post=failed_post, position=0, is_cover=True, private_object_key="will-fail")
         with patch("posts.services.get_storage", side_effect=StorageError("down")):
@@ -1192,4 +1194,449 @@ class MediaAPITests(APITestCase):
         current.refresh_from_db()
         replacement.refresh_from_db()
         self.assertIsNone(current.public_object_key)
-        self.assertEqual(replacement.public_object_key, "new-private")
+        self.assertTrue(replacement.public_object_key.startswith("publications/"))
+
+
+    def test_republication_uses_fresh_keys_and_old_cleanup_preserves_new_media(self):
+        media = self.ready_media(position=0, is_cover=True)
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            published = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"})
+            self.assertEqual(published.status_code, 200)
+            media.refresh_from_db()
+            old_key = media.public_object_key
+            first_date = published.data["published_at"]
+            self.assertEqual(self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "draft"}).status_code, 200)
+            republished = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"})
+            media.refresh_from_db()
+            new_key = media.public_object_key
+            self.assertNotEqual(old_key, new_key)
+            self.assertEqual(republished.data["published_at"], first_date)
+            call_command("cleanup_media_storage")
+            self.assertIn(("public", old_key), self.storage.deleted)
+            self.assertNotIn(("public", new_key), self.storage.deleted)
+            # Repeating the same published layout is idempotent.
+            layout = {"items": [{"id": str(media.id), "position": 0, "is_cover": True}]}
+            self.assertEqual(self.client.put(f"/api/v1/posts/{self.post.id}/media/layout/", layout, format="json").status_code, 200)
+            media.refresh_from_db()
+            self.assertEqual(media.public_object_key, new_key)
+            self.assertEqual(len(self.storage.promoted), 2)
+
+    def test_metadata_edit_after_unpublish_does_not_restore_stale_public_state(self):
+        from .views import MediaDetailView
+        media = self.ready_media(position=0, is_cover=True, public_object_key="retired")
+        self.post.status = Post.Status.PUBLISHED
+        self.post.save()
+        stale_post = Post.objects.get(pk=self.post.pk)
+        stale_media = PostMedia.objects.get(pk=media.pk)
+        self.assertEqual(self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "draft"}).status_code, 200)
+        # Simulate the stale pair a previous unlocked request had obtained.
+        # Metadata edits must read fresh DB state in their transaction instead.
+        with patch.object(MediaDetailView, "get_media", return_value=(stale_post, stale_media)), patch("posts.signals._send_webhook") as webhook:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.patch(f"/api/v1/posts/{self.post.id}/media/{media.id}/", {"caption": "caption corregido"})
+        self.assertEqual(response.status_code, 200)
+        self.post.refresh_from_db()
+        media.refresh_from_db()
+        self.assertEqual(self.post.status, Post.Status.DRAFT)
+        self.assertIsNone(media.public_object_key)
+        self.assertEqual(media.caption, "caption corregido")
+        webhook.assert_not_called()
+
+    def test_republication_with_executed_commit_callbacks(self):
+        media = self.ready_media(position=0, is_cover=True)
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"}).status_code, 200)
+            media.refresh_from_db()
+            retired_key = media.public_object_key
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "draft"}).status_code, 200)
+            self.assertIn(("public", retired_key), self.storage.deleted)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"}).status_code, 200)
+            media.refresh_from_db()
+            self.assertNotEqual(media.public_object_key, retired_key)
+            self.assertNotIn(("public", media.public_object_key), self.storage.deleted)
+            self.assertIsNotNone(StorageDeletionTask.objects.get(object_key=retired_key).completed_at)
+
+    def test_stale_deletion_task_never_deletes_current_public_or_private_key(self):
+        media = self.ready_media(position=0, is_cover=True, public_object_key="still-public")
+        StorageDeletionTask.objects.create(bucket="public", object_key=media.public_object_key)
+        StorageDeletionTask.objects.create(bucket="private", object_key=media.private_object_key)
+        with patch("posts.services.get_storage", return_value=self.storage):
+            call_command("cleanup_media_storage")
+        self.assertEqual(self.storage.deleted, [])
+
+    def test_partial_promotion_timeout_rolls_back_layout_and_queues_all_attempts(self):
+        media = self.ready_media(position=0, is_cover=True, private_poster_key="poster")
+        view_storage, service_storage = self.storage_patches()
+        with view_storage, service_storage, patch.object(self.storage, "promote", side_effect=[None, StorageError("timeout")]):
+            response = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "published"})
+        self.assertEqual(response.status_code, 503)
+        self.post.refresh_from_db()
+        media.refresh_from_db()
+        self.assertEqual(self.post.status, Post.Status.DRAFT)
+        self.assertIsNone(media.public_object_key)
+        # Includes uncertain timeout outcome, not only acknowledged copies.
+        self.assertEqual(StorageDeletionTask.objects.count(), 2)
+
+    def test_cleanup_runs_after_commit_and_failure_is_durable(self):
+        media = self.ready_media(position=0, is_cover=True, public_object_key="retired")
+        self.post.status = Post.Status.PUBLISHED
+        self.post.save()
+        with patch("posts.services.get_storage", return_value=self.storage), patch.object(self.storage, "delete", side_effect=StorageError("timeout")) as delete:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.patch(f"/api/v1/posts/{self.post.id}/", {"status": "draft"})
+                delete.assert_not_called()
+            self.assertEqual(response.status_code, 200)
+            delete.assert_called_once_with("public", "retired")
+        task = StorageDeletionTask.objects.get(object_key="retired")
+        self.assertEqual(task.attempts, 1)
+        self.assertIsNone(task.completed_at)
+        self.assertTrue(task.last_error)
+        with patch("posts.services.get_storage", return_value=self.storage):
+            call_command("cleanup_media_storage")
+        task.refresh_from_db()
+        self.assertIsNotNone(task.completed_at)
+
+
+class StabilizationTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_slug_collision_at_max_length_reserves_suffix(self):
+        user = User.objects.create_user("slug-owner")
+        title = "x" * 200
+        first = create_post(user, title)
+        second = create_post(user, title)
+        self.assertEqual(len(first.slug), 200)
+        self.assertEqual(len(second.slug), 200)
+        self.assertTrue(second.slug.endswith("-2"))
+        self.assertNotEqual(first.slug, second.slug)
+
+    def test_login_and_refresh_have_independent_ip_limits(self):
+        with patch("posts.throttles.LoginThrottle.get_rate", return_value="2/min"):
+            for _ in range(2):
+                self.assertEqual(self.client.post("/api/v1/auth/login/", {"username": "unknown", "password": "bad"}).status_code, 401)
+            blocked = self.client.post("/api/v1/auth/login/", {"username": "unknown", "password": "bad"})
+            self.assertEqual(blocked.status_code, 429)
+            self.assertIn("Retry-After", blocked)
+            self.assertEqual(self.client.post("/api/v1/auth/refresh/", {"refresh": "invalid"}).status_code, 401)
+            self.assertEqual(self.client.post("/api/v1/auth/refresh/", {"refresh": "invalid"}).status_code, 401)
+            self.assertEqual(self.client.post("/api/v1/auth/refresh/", {"refresh": "invalid"}).status_code, 429)
+
+    @patch("posts.storage.urlopen", side_effect=TimeoutError("provider timeout"))
+    def test_storage_timeout_normalized_for_all_operations(self, urlopen_mock):
+        storage = SupabaseStorage("https://storage.test", "fake", "private", "public")
+        operations = [lambda: storage.get_object_info("private", "key"), lambda: storage.promote("key", "new-key"), lambda: storage.delete("public", "key"), lambda: storage.create_upload_url("key", 900)]
+        for operation in operations:
+            with self.assertRaises(StorageError):
+                operation()
+
+    @patch("posts.storage.urlopen")
+    def test_storage_promotion_copies_to_distinct_public_key(self, urlopen_mock):
+        urlopen_mock.return_value = FakeHTTPResponse()
+        storage = SupabaseStorage("https://storage.test", "fake", "private", "public")
+        storage.promote("private-source", destination_key="new-public-key")
+        payload = json.loads(urlopen_mock.call_args.args[0].data)
+        self.assertEqual(payload["sourceKey"], "private-source")
+        self.assertEqual(payload["destinationKey"], "new-public-key")
+
+
+    def test_readiness_checks_database_without_authentication(self):
+        response = self.client.get("/api/v1/ready/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"status": "ready"})
+
+    def test_readiness_returns_safe_503_on_database_failure(self):
+        from django.db import DatabaseError
+        with patch("posts.views.connection.cursor", side_effect=DatabaseError("password=secret")):
+            response = self.client.get("/api/v1/ready/")
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.data, {"status": "unavailable"})
+            self.assertEqual(self.client.get("/api/v1/health/").status_code, 200)
+
+    def test_cleanup_callbacks_are_coalesced_and_discarded_on_rollback(self):
+        from django.db import transaction
+        from .services import enqueue_storage_deletion
+        with patch("posts.services.run_media_housekeeping") as cleanup:
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                with transaction.atomic():
+                    for number in range(10):
+                        enqueue_storage_deletion("public", f"retired-{number}")
+            self.assertEqual(len(callbacks), 1)
+            cleanup.assert_called_once_with(expire_intents=False)
+            cleanup.reset_mock()
+            with self.captureOnCommitCallbacks(execute=True) as rolled_back:
+                try:
+                    with transaction.atomic():
+                        enqueue_storage_deletion("public", "rollback-key")
+                        raise ValueError("rollback")
+                except ValueError:
+                    pass
+            self.assertEqual(rolled_back, [])
+            cleanup.assert_not_called()
+
+
+    def test_admin_cannot_change_storage_state_or_post_status(self):
+        from django.contrib import admin
+        from .admin import PostAdmin, PostMediaAdmin, StorageDeletionTaskAdmin
+        self.assertIn("status", PostAdmin(Post, admin.site).readonly_fields)
+        for model, admin_class in [(PostMedia, PostMediaAdmin), (StorageDeletionTask, StorageDeletionTaskAdmin)]:
+            model_admin = admin_class(model, admin.site)
+            self.assertFalse(model_admin.has_add_permission(None))
+            self.assertFalse(model_admin.has_change_permission(None))
+            self.assertFalse(model_admin.has_delete_permission(None))
+
+
+    def test_untrusted_forwarded_address_cannot_bypass_login_limit(self):
+        with patch("posts.throttles.LoginThrottle.get_rate", return_value="1/min"):
+            self.assertEqual(self.client.post("/api/v1/auth/login/", {"username": "unknown", "password": "bad"}, HTTP_X_FORWARDED_FOR="192.0.2.1").status_code, 401)
+            self.assertEqual(self.client.post("/api/v1/auth/login/", {"username": "unknown", "password": "bad"}, HTTP_X_FORWARDED_FOR="192.0.2.2").status_code, 429)
+
+
+class MediaBackupTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("backup-owner")
+        self.post = create_post(self.user, "Backup")
+        self.storage = FakeStorage()
+
+    def media(self, **kwargs):
+        return PostMedia.objects.create(post=self.post, kind="image", mime_type="image/jpeg", size_bytes=3, **kwargs)
+
+    def test_backup_deduplicates_all_referenced_objects_with_private_manifest(self):
+        import tempfile
+        from pathlib import Path
+        self.media(private_object_key="same", private_poster_key="poster", public_object_key="public-copy", public_poster_key="poster-copy")
+        self.media(private_object_key="same")
+        data = b"image-bytes"
+        def download(bucket, key, stream, max_bytes):
+            stream.write(data)
+            return len(data), hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as temporary, patch("posts.management.commands.backup_media_storage.get_storage", return_value=self.storage), patch.object(self.storage, "download_to", create=True, side_effect=download) as downloads:
+            output = Path(temporary) / "backup"
+            call_command("backup_media_storage", output=str(output), stdout=io.StringIO())
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertTrue(manifest["complete"])
+            self.assertEqual(downloads.call_count, 4)
+            self.assertEqual(len(manifest["objects"]), 4)
+            self.assertEqual(output.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((output / "manifest.json").stat().st_mode & 0o777, 0o600)
+            for entry in manifest["objects"]:
+                saved = output / entry["file"]
+                self.assertEqual(saved.read_bytes(), data)
+                self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest())
+                self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+            self.assertNotIn("service_role", json.dumps(manifest))
+            self.assertEqual(list(Path(temporary).glob("*.partial-*")), [])
+            from django.core.management.base import CommandError
+            with self.assertRaises(CommandError):
+                call_command("backup_media_storage", output=str(output))
+
+    def test_failed_backup_preserves_incomplete_manifest_and_safe_error(self):
+        import tempfile
+        from pathlib import Path
+        from django.core.management.base import CommandError
+        self.media(private_object_key="missing")
+        with tempfile.TemporaryDirectory() as temporary, patch("posts.management.commands.backup_media_storage.get_storage", return_value=self.storage), patch.object(self.storage, "download_to", create=True, side_effect=StorageError("SECRET_TOKEN must never reach logs")):
+            output = Path(temporary) / "backup"
+            with self.assertRaises(CommandError) as error:
+                call_command("backup_media_storage", output=str(output), stdout=io.StringIO())
+            self.assertNotIn("SECRET_TOKEN", str(error.exception))
+            self.assertFalse(output.exists())
+            partial = list(Path(temporary).glob("backup.partial-*"))
+            self.assertEqual(len(partial), 1)
+            manifest = json.loads((partial[0] / "manifest.json").read_text())
+            self.assertFalse(manifest["complete"])
+            self.assertNotIn("SECRET_TOKEN", json.dumps(manifest))
+
+    @patch("posts.storage.urlopen")
+    def test_download_stream_enforces_limit_hash_and_rejects_path_traversal(self, urlopen_mock):
+        storage = SupabaseStorage("https://storage.test", "secret", "private", "public")
+        output = io.BytesIO()
+        urlopen_mock.return_value = io.BytesIO(b"content")
+        size, digest = storage.download_to("private", "posts/asset", output, 100)
+        self.assertEqual((size, digest), (7, hashlib.sha256(b"content").hexdigest()))
+        self.assertEqual(output.getvalue(), b"content")
+        request = urlopen_mock.call_args.args[0]
+        self.assertNotIn("secret", request.full_url)
+        self.assertEqual(request.get_method(), "GET")
+        urlopen_mock.return_value = io.BytesIO(b"too-large")
+        with self.assertRaises(StorageError):
+            storage.download_to("private", "posts/asset", io.BytesIO(), 2)
+        with self.assertRaises(StorageError):
+            storage.download_to("private", "../elsewhere", io.BytesIO(), 100)
+
+    def test_backup_total_limit_keeps_recoverable_completed_objects(self):
+        import tempfile
+        from pathlib import Path
+        from django.core.management.base import CommandError
+        self.media(private_object_key="first", public_object_key="second")
+        def download(bucket, key, stream, max_bytes):
+            if max_bytes < 3:
+                raise StorageError("limit")
+            stream.write(b"123")
+            return 3, hashlib.sha256(b"123").hexdigest()
+        with tempfile.TemporaryDirectory() as temporary, patch("posts.management.commands.backup_media_storage.get_storage", return_value=self.storage), patch.object(self.storage, "download_to", create=True, side_effect=download):
+            with self.assertRaises(CommandError):
+                call_command("backup_media_storage", output=str(Path(temporary) / "backup"), max_total_bytes=4, stdout=io.StringIO())
+            partial = next(Path(temporary).glob("backup.partial-*"))
+            manifest = json.loads((partial / "manifest.json").read_text())
+            self.assertFalse(manifest["complete"])
+            self.assertEqual(len(manifest["objects"]), 1)
+            self.assertEqual((partial / manifest["objects"][0]["file"]).read_bytes(), b"123")
+
+
+from unittest import skipUnless
+from django.db import connection as test_connection, DatabaseError as TestDatabaseError, transaction as test_transaction
+
+
+@skipUnless(test_connection.vendor == "postgresql", "Permission integration requires PostgreSQL")
+class SecureDataAPIIntegrationTests(APITestCase):
+    def setUp(self):
+        from django.core.management.base import CommandError
+        self.CommandError = CommandError
+        with test_connection.cursor() as cursor:
+            for role in ("anon", "authenticated", "service_role"):
+                cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [role])
+                if cursor.fetchone() is None:
+                    cursor.execute(f'CREATE ROLE "{role}" NOLOGIN')
+            cursor.execute("GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role")
+            cursor.execute("GRANT ALL ON TABLE public.auth_user, public.posts_post TO anon, authenticated, PUBLIC, service_role")
+            cursor.execute("GRANT ALL ON SEQUENCE public.posts_post_id_seq TO anon, authenticated, PUBLIC, service_role")
+            cursor.execute("CREATE TABLE public.moon_external_acl_test (id serial PRIMARY KEY)")
+            cursor.execute("GRANT ALL ON public.moon_external_acl_test TO anon, authenticated, PUBLIC")
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS storage")
+            cursor.execute("CREATE TABLE storage.moon_acl_test (id integer)")
+            cursor.execute("GRANT ALL ON storage.moon_acl_test TO anon, authenticated, PUBLIC")
+
+    def temporary_plan(self):
+        import tempfile
+        # /tmp is outside the MoonBlogger source tree; plan mode remains 0600.
+        return tempfile.TemporaryDirectory(prefix="moon-acl-test-")
+
+    def permission(self, role, table, permission="SELECT"):
+        with test_connection.cursor() as cursor:
+            cursor.execute("SELECT has_table_privilege(%s, %s, %s)", [role, table, permission])
+            return cursor.fetchone()[0]
+
+    def test_preview_preserves_grants_and_plan_scopes_exact_relations(self):
+        from pathlib import Path
+        with self.temporary_plan() as temporary:
+            path = Path(temporary) / "plan.json"
+            call_command("secure_data_api", plan_file=str(path), stdout=io.StringIO())
+            plan = json.loads(path.read_text())
+            self.assertTrue(self.permission("anon", "public.auth_user"))
+            names = {item["name"] for item in plan["relations"]}
+            self.assertIn("auth_user", names)
+            self.assertIn("auth_user_groups", names)
+            self.assertIn("django_migrations", names)
+            self.assertIn("posts_post_id_seq", names)
+            self.assertNotIn("moon_external_acl_test", names)
+            self.assertNotIn("moon_external_acl_test_id_seq", names)
+            self.assertNotIn("moon_acl_test", names)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_apply_denies_browser_reads_writes_preserves_owner_service_and_other_apps(self):
+        from pathlib import Path
+        with self.temporary_plan() as temporary:
+            call_command("secure_data_api", apply=True, plan_file=str(Path(temporary) / "plan.json"), stdout=io.StringIO())
+        for role in ("anon", "authenticated"):
+            self.assertFalse(self.permission(role, "public.auth_user"))
+            self.assertFalse(self.permission(role, "public.posts_post", "INSERT"))
+            with self.assertRaises(TestDatabaseError):
+                with test_transaction.atomic(), test_connection.cursor() as cursor:
+                    cursor.execute(f'SET LOCAL ROLE "{role}"')
+                    cursor.execute("SELECT * FROM public.auth_user LIMIT 1")
+            with self.assertRaises(TestDatabaseError):
+                with test_transaction.atomic(), test_connection.cursor() as cursor:
+                    cursor.execute(f'SET LOCAL ROLE "{role}"')
+                    cursor.execute("UPDATE public.posts_post SET title = 'unauthorized'")
+        owner = User.objects.create_user("owner-after-revoke")
+        post = create_post(owner, "owner can create")
+        post.title = "owner can update"
+        post.save()
+        self.assertEqual(Post.objects.get(pk=post.pk).title, "owner can update")
+        post.delete()
+        self.assertFalse(Post.objects.filter(pk=post.pk).exists())
+        self.assertTrue(self.permission("service_role", "public.auth_user"))
+        self.assertTrue(self.permission("anon", "public.moon_external_acl_test"))
+        self.assertTrue(self.permission("anon", "storage.moon_acl_test"))
+
+    def test_inherited_browser_access_aborts_all_revocations(self):
+        from pathlib import Path
+        with test_connection.cursor() as cursor:
+            cursor.execute("CREATE ROLE moon_acl_inherited_test NOLOGIN")
+            cursor.execute("GRANT SELECT ON public.auth_user TO moon_acl_inherited_test")
+            cursor.execute("GRANT moon_acl_inherited_test TO anon")
+        with self.temporary_plan() as temporary:
+            with self.assertRaises(self.CommandError):
+                call_command("secure_data_api", apply=True, plan_file=str(Path(temporary) / "plan.json"), stdout=io.StringIO())
+        self.assertTrue(self.permission("authenticated", "public.auth_user"))
+        self.assertTrue(self.permission("authenticated", "public.posts_post", "INSERT"))
+
+    def test_service_role_public_dependency_aborts_without_regranting(self):
+        from pathlib import Path
+        with test_connection.cursor() as cursor:
+            cursor.execute("REVOKE ALL ON public.auth_user FROM service_role")
+        self.assertTrue(self.permission("service_role", "public.auth_user"))
+        with self.temporary_plan() as temporary:
+            with self.assertRaises(self.CommandError):
+                call_command("secure_data_api", apply=True, plan_file=str(Path(temporary) / "plan.json"), stdout=io.StringIO())
+        self.assertTrue(self.permission("anon", "public.auth_user"))
+        self.assertTrue(self.permission("service_role", "public.auth_user"))
+
+    def test_column_acl_aborts_before_change(self):
+        from pathlib import Path
+        with test_connection.cursor() as cursor:
+            cursor.execute("GRANT SELECT (username) ON public.auth_user TO anon")
+        with self.temporary_plan() as temporary:
+            with self.assertRaises(self.CommandError):
+                call_command("secure_data_api", apply=True, plan_file=str(Path(temporary) / "plan.json"), stdout=io.StringIO())
+        self.assertTrue(self.permission("authenticated", "public.auth_user"))
+
+    def test_rollback_restores_original_role_privileges_and_grant_option(self):
+        from pathlib import Path
+        from posts.management.commands.secure_data_api import Command
+        with test_connection.cursor() as cursor:
+            cursor.execute("GRANT SELECT ON public.auth_user TO anon WITH GRANT OPTION")
+        with self.temporary_plan() as temporary:
+            path = Path(temporary) / "plan.json"
+            call_command("secure_data_api", apply=True, plan_file=str(path), stdout=io.StringIO())
+            plan = json.loads(path.read_text())
+            with test_connection.cursor() as cursor:
+                # The test owns the surrounding transaction; omit BEGIN/COMMIT.
+                for sql in plan["rollback_sql"][1:-1]:
+                    cursor.execute(sql)
+                restored = Command().build_plan(cursor)
+        for before, after in zip(plan["relations"], restored["relations"]):
+            self.assertEqual(before["acl_before"], after["acl_before"])
+        self.assertTrue(self.permission("anon", "public.auth_user"))
+
+
+class SecureDataAPIPreviewTests(APITestCase):
+    def test_non_postgresql_preview_is_safe_and_apply_refuses(self):
+        from django.core.management.base import CommandError
+        output = io.StringIO()
+        with patch("posts.management.commands.secure_data_api.connection.vendor", "sqlite"):
+            call_command("secure_data_api", stdout=output)
+            self.assertIn("ningún permiso modificado", output.getvalue())
+            with self.assertRaises(CommandError):
+                call_command("secure_data_api", apply=True)
+
+    def test_plan_rejects_source_repo_and_other_real_git_repositories(self):
+        import tempfile
+        from pathlib import Path
+        from django.core.management.base import CommandError
+        from posts.management.commands.secure_data_api import Command
+        with self.assertRaises(CommandError):
+            Command().save_plan(str(Path(settings.BASE_DIR) / "acl.json"), {})
+        with tempfile.TemporaryDirectory(prefix="moon-acl-repo-test-") as temporary:
+            repository = Path(temporary)
+            (repository / ".git").mkdir()
+            (repository / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+            with self.assertRaises(CommandError):
+                Command().save_plan(str(repository / "acl.json"), {})
+            self.assertFalse((repository / "acl.json").exists())

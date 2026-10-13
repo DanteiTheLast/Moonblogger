@@ -1,7 +1,7 @@
 from datetime import timedelta, timezone as dt_timezone
 
 from django.conf import settings
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, DatabaseError, connection
 from django.core.cache import cache
 from django.db.models import F
 from django.db.models import Prefetch
@@ -102,6 +102,20 @@ class HealthCheckView(APIView):
         return Response({"status": "ok"})
 
 
+class ReadinessCheckView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        except DatabaseError:
+            return Response({"status": "unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({"status": "ready"})
+
+
 class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
@@ -139,9 +153,12 @@ class PostViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        requested_status = serializer.validated_data.pop("status", instance.status)
+        requested_status = serializer.validated_data.pop("status", None)
         try:
             with transaction.atomic():
+                instance = Post.objects.select_for_update().get(pk=instance.pk, author=request.user)
+                if requested_status is None:
+                    requested_status = instance.status
                 for attribute, value in serializer.validated_data.items():
                     setattr(instance, attribute, value)
                 if requested_status == Post.Status.PUBLISHED and instance.status != Post.Status.PUBLISHED:
@@ -319,16 +336,23 @@ class MediaDetailView(PostMediaBaseView):
             return None, None
 
     def patch(self, request, post_id, media_id):
-        post, media = self.get_media(post_id, media_id)
-        if not media:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        serializer = MediaMetadataSerializer(media, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        was_public = post.status == Post.Status.PUBLISHED and media.position is not None and media.state == PostMedia.State.READY
-        serializer.save()
-        if was_public:
-            post.save()  # existing signal invokes ISR after transaction commit
-        return Response(serializer.data)
+        # Serialize all media mutations on the parent Post before its media row.
+        # Otherwise a metadata save can restore keys/status read before a
+        # concurrent unpublish, layout change, or deletion.
+        with transaction.atomic():
+            try:
+                post = self.get_post(post_id, lock=True)
+                media = post.media.select_for_update().get(pk=media_id)
+            except (Post.DoesNotExist, PostMedia.DoesNotExist):
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            serializer = MediaMetadataSerializer(media, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            was_public = post.status == Post.Status.PUBLISHED and media.position is not None and media.state == PostMedia.State.READY
+            serializer.save()
+            if was_public:
+                post.save()  # existing signal invokes ISR after transaction commit
+            data = serializer.data
+        return Response(data)
 
     def delete(self, request, post_id, media_id):
         with transaction.atomic():

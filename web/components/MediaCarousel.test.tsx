@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PostMedia } from "@/lib/types";
 import MediaCarousel from "./MediaCarousel";
 import {
   getMediaAspectRatio,
+  handleCarouselKey,
   getSlideIndex,
   normalizeCarouselTransition,
   orderMedia,
@@ -87,5 +88,21 @@ describe("MediaCarousel UI", () => {
     expect(markup).toContain('poster="https://project.supabase.co/storage/v1/object/public/media/night.jpg"');
     expect(markup).toContain('type="video/mp4"');
     expect(markup).toContain('aria-label="Vídeo de la noche"');
+  });
+});
+
+describe("atajos del carrusel", () => {
+  it("conserva flechas y Home/End de controles descendientes", () => {
+    const container = {}; const video = {};
+    const move = vi.fn(); const select = vi.fn(); const preventDefault = vi.fn();
+    for (const key of ["ArrowLeft", "ArrowRight", "Home", "End"]) {
+      handleCarouselKey({ key, target: video, currentTarget: container, preventDefault }, move, select, 3);
+    }
+    expect(move).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+    expect(preventDefault).not.toHaveBeenCalled();
+    handleCarouselKey({ key: "ArrowRight", target: container, currentTarget: container, preventDefault }, move, select, 3);
+    expect(move).toHaveBeenCalledWith(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
   });
 });

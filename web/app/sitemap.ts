@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getPublishedPosts } from "@/lib/api";
+import { getAllPublishedPosts, getApiBaseUrl } from "@/lib/api";
 
 /**
  * URL base pública del sitio. Se lee de `SITE_URL` en tiempo de build
@@ -14,21 +14,15 @@ function getSiteUrl(): string {
  * Sitemap con ISR: se revalida cada hora (revalidate: 3600) y bajo demanda
  * vía revalidateTag('posts') cuando se publica/actualiza un post.
  *
- * Si la API no está disponible en build, devuelve solo la URL base para no
- * bloquear el deploy; las entradas de posts se añadirán on-demand.
+ * Los errores se propagan: nunca se cachea un sitemap parcial como éxito.
  */
 export const revalidate = 3600;
+
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = getSiteUrl();
 
-  let posts: Awaited<ReturnType<typeof getPublishedPosts>> = [];
-  try {
-    posts = await getPublishedPosts();
-  } catch {
-    // Si la API no responde en build, no bloqueamos el deploy.
-    // El sitemap se regenerará on-demand con revalidateTag.
-  }
+  const posts = await getAllPublishedPosts(getApiBaseUrl());
 
   const postEntries: MetadataRoute.Sitemap = posts.map((post) => ({
     url: `${baseUrl}/posts/${post.slug}`,

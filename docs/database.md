@@ -15,7 +15,7 @@
 | `status` | varchar | NOT NULL, DEFAULT `draft` | `choices=("draft","published")`, `db_index`. |
 | `created_at` | timestamptz | NOT NULL | `auto_now_add`. Siempre UTC. |
 | `updated_at` | timestamptz | NOT NULL | `auto_now`. Siempre UTC. |
-| `published_at` | timestamptz | NULL | Se fija al publicar, se limpia al volver a `draft`. |
+| `published_at` | timestamptz | NULL | Fecha de primera publicación; se conserva al volver a `draft`. |
 | `carousel_transition` | varchar | NOT NULL, DEFAULT `slide` | `slide`, `fade`, `bubble` o `none`. |
 
 ## Índices
@@ -33,7 +33,8 @@
 
 ## Reglas
 
-- **Borrado físico** (`DELETE`): los backups (`pg_dump`) cubren la recuperación.
+- **Borrado físico** (`DELETE`): recuperar contenido requiere un volcado de BD y
+  respaldo separado de objetos Storage; `pg_dump` solo no recupera las fotos.
 - Validación de no-vacío en el backend (serializer); `NOT NULL` en la BD.
 
 ## Multimedia (Etapa 1)
@@ -51,8 +52,9 @@ post, una sola portada por post e índices para layout y limpieza de intents.
 `StorageDeletionTask` es una cola persistente de borrado (`bucket`, clave,
 intentos, error y finalización). Al borrar media o posts se encola su limpieza;
 `manage.py cleanup_media_storage` borra intents vencidos y reprocesa las tareas
-pendientes de manera idempotente. No requiere scheduler externo, aunque en
-producción debe invocarse periódicamente por el mecanismo operativo elegido.
+pendientes de manera idempotente. También se intenta un lote después del
+commit de una retirada y antes de nuevas cargas. Para garantizar reintentos
+sin tráfico se necesita ejecución periódica por el mecanismo operativo elegido.
 
 ## Tablas de la blacklist de JWT (SimpleJWT)
 

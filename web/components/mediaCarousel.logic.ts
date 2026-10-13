@@ -38,3 +38,17 @@ export function getMediaAspectRatio(media: PostMedia): string {
   }
   return "16 / 9";
 }
+
+/** Sólo el contenedor captura atajos: vídeo y botones conservan sus teclas. */
+export function handleCarouselKey(
+  event: { key: string; target: unknown; currentTarget: unknown; preventDefault: () => void },
+  moveSlide: (direction: -1 | 1) => void,
+  selectSlide: (index: number) => void,
+  total: number,
+) {
+  if (event.target !== event.currentTarget) return;
+  if (event.key === "ArrowLeft") { event.preventDefault(); moveSlide(-1); }
+  else if (event.key === "ArrowRight") { event.preventDefault(); moveSlide(1); }
+  else if (event.key === "Home") { event.preventDefault(); selectSlide(0); }
+  else if (event.key === "End") { event.preventDefault(); selectSlide(total - 1); }
+}

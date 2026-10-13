@@ -28,6 +28,7 @@ interface PostsApi {
     @GET("api/v1/posts/")
     suspend fun listPosts(
         @Query("status") status: String? = null,
+        @Query("page") page: Int? = null,
     ): PostPage
 
     @GET("api/v1/posts/{id}/")

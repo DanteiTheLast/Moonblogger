@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +39,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +74,27 @@ fun PostEditorScreen(
     onDone: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showExitDialog by remember { mutableStateOf(false) }
+    val requestBack: () -> Unit = {
+        if (!state.isSaving && !state.isInspecting) {
+            if (state.hasChanges) showExitDialog = true else onBack()
+        }
+    }
+    BackHandler(onBack = requestBack)
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Salir del editor") },
+            text = { Text(if (!state.localCopyAvailable) "No hay una copia local actualizada. Sigue escribiendo o guarda en el servidor antes de salir; descartar puede perder el escrito. Los cambios ya guardados en el servidor no se revierten." else "Puedes conservar la copia local del escrito y volver después. Las fotos que aún no han subido deben elegirse de nuevo. Descartar la copia local no revierte los cambios ya guardados en el servidor.") },
+            confirmButton = { TextButton(enabled = state.localCopyAvailable, onClick = { showExitDialog = false; onBack() }) { Text("Conservar y salir") } },
+            dismissButton = {
+                Column {
+                    TextButton(onClick = { if (viewModel.discardLocal()) { showExitDialog = false; onBack() } }) { Text("Descartar copia local") }
+                    TextButton(onClick = { showExitDialog = false }) { Text("Seguir escribiendo") }
+                }
+            },
+        )
+    }
     val photoPicker = rememberLauncherForActivityResult(
         contract = PickMultipleVisualMedia(maxItems = 10),
         onResult = viewModel::onPhotosSelected,
@@ -92,7 +119,7 @@ fun PostEditorScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = requestBack, enabled = !state.isSaving && !state.isInspecting) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.cancel),
@@ -114,6 +141,13 @@ fun PostEditorScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (state.loadError != null) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(requireNotNull(state.loadError), color = MaterialTheme.colorScheme.error)
+                    if (state.localRecoveryError) {
+                        Button(onClick = viewModel::discardFailedRecovery) { Text("Descartar copia local ilegible") }
+                    } else Button(onClick = viewModel::retryLoad) { Text("Reintentar carga") }
+                }
             } else {
                 Column(
                     modifier = Modifier
@@ -123,6 +157,10 @@ fun PostEditorScreen(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    state.localNotice?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (state.needsPhotoReview) {
+                        OutlinedButton(onClick = viewModel::acknowledgeMissingPhotos) { Text("Revisé las fotos recuperadas") }
+                    }
                     OutlinedTextField(
                         value = state.title,
                         onValueChange = viewModel::onTitleChange,
@@ -317,9 +355,9 @@ private fun MediaEditorCard(
             }
             TextButton(onClick = onRemove, enabled = enabled) { Text("Quitar") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = onMoveUp, enabled = enabled && index > 0) { Text("↑") }
-            TextButton(onClick = onMoveDown, enabled = enabled && index < count - 1) { Text("↓") }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onMoveUp, enabled = enabled && index > 0) { Text("Mover arriba") }
+            TextButton(onClick = onMoveDown, enabled = enabled && index < count - 1) { Text("Mover abajo") }
             TextButton(onClick = onSetCover, enabled = enabled && !item.isCover) { Text("Usar de portada") }
         }
         OutlinedTextField(

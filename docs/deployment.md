@@ -34,9 +34,9 @@ Vercel Hobby) en el momento de escribir este documento (17/08/2026).
 3. Estas credenciales alimentan las variables `DB_*` del backend (paso 2).
    Con el pooler *session* el `sslmode` es `require`.
 
-> Nota sobre pausa: Supabase Free **pausa el proyecto tras 7 días sin
-> actividad** y lo reanuda con la siguiente petición (los datos no se pierden).
-> Para un blog personal suele ser aceptable; ver [Ping anti-pausa](#ping-anti-pausa).
+> Supabase puede pausar proyectos Free con poca actividad. Un proyecto ya
+> pausado se restaura desde el dashboard; no asumir que un ping lo reanuda.
+> Después comprobar la API de publicaciones. Ver [guía oficial](https://supabase.com/docs/guides/deployment/going-into-prod).
 
 ### Crear el esquema y el usuario de Moon
 
@@ -62,7 +62,7 @@ distinta de la local.
 
 1. La configuración del servicio vive en **`render.yaml`** (raíz del repo):
    web service `moonblogger-api`, `runtime: docker`, `rootDir: backend`, plan
-   `free`, `healthCheckPath: /api/v1/health/` y las variables de entorno
+   `free`, `healthCheckPath: /api/v1/ready/` y las variables de entorno
    (no-secretas).
 2. En Render → **New + → Blueprint** → conectar GitHub → repositorio de
    MoonBlogger, rama `main`. Elegir **región** (recomendada: la más cercana a
@@ -116,8 +116,10 @@ El blueprint define las no-secretas y auto-genera la secret key:
 >
 > **Migraciones:** se aplican manualmente desde una máquina local con el código
 > (misma convención que la creación inicial; ver [Sección 1](#1-base-de-datos-supabase-free)).
-> El `health/` no consulta la BD: un deploy puede quedar "healthy" con
-> credenciales de Supabase incorrectas → siempre verificar `public/posts/`.
+> `health/` es liveness y no consulta la BD. El blueprint nuevo usa `ready/`,
+> que comprueba conexión y devuelve 503 seguro ante fallos. También verificar
+> `public/posts/`: readiness de conexión no prueba esquema, contenido ni Storage.
+> El cambio del blueprint necesita un despliegue del backend que incluya `ready/`.
 
 ---
 
@@ -269,8 +271,8 @@ Límites del plan **Supabase Free** (agosto 2026):
 ### Ping anti-pausa
 
 Render duerme el servicio tras **15 min** sin tráfico (cold start ~30-60 s en
-el siguiente request) y Supabase pausa el proyecto tras 7 días sin actividad
-(reanuda solo al recibir una petición). Para un blog personal es tolerable,
+el siguiente request); Supabase puede pausar por poca actividad y necesita
+restauración desde su dashboard si ya está pausado. Para un blog personal,
 pero para reducir el cold start y evitar la pausa se puede configurar un
 servicio gratuito de monitoreo (p. ej. cron-job.org) que haga una petición
 periódica a `https://moonblogger-api.onrender.com/api/v1/public/posts/` cada
@@ -282,7 +284,9 @@ de 750 h/mes del plan free.
 
 ### Verificación de salud
 
-- API: `GET /api/v1/health/` → `{"status": "ok"}`.
+- API liveness: `GET /api/v1/health/` → `{"status": "ok"}`.
+- API readiness: `GET /api/v1/ready/` → 200 si conecta a BD; 503 seguro si falla.
+- Lectura funcional: `GET /api/v1/public/posts/` → 200 con envelope paginado.
 - Web: `GET /` responde con el listado de publicaciones publicadas.
 
 ### Escaneo de secretos
@@ -347,3 +351,29 @@ una máquina con el código (igual que en la creación inicial):
 
 En producción configure `VISIT_FORWARDING_SECRET` con el mismo secreto que el
 proxy firmante. Ejecute periódicamente `python manage.py cleanup_public_visits`.
+
+## Estabilización de octubre 2026
+
+- No basta HTTP 200 de la home para monitorear: una versión previa pudo guardar
+  HTML de error. Verificar lectura API y contenido de la web.
+- Auth usa límites por IP configurables: AUTH_LOGIN_THROTTLE_RATE (10/min) y
+  AUTH_REFRESH_THROTTLE_RATE (60/min). AUTH_TRUSTED_PROXY_COUNT es 0 por defecto:
+  no confiar X-Forwarded-For sin verificar cadena de proxy Render. Con proxy
+  sin ajustar puede agrupar visitantes; con varios workers se necesita caché
+  compartida o límite del proveedor para consistencia global.
+- Ejecutar periódicamente cleanup_media_storage y cleanup_public_visits. Los
+  callbacks intentan retiradas, pero no reemplazan reintentos sin tráfico.
+- Respaldo de fotos: configurar las mismas variables Storage del backend y
+  ejecutar `python manage.py backup_media_storage --output /destino/nuevo`.
+  El padre debe existir; el comando no sobrescribe, guarda manifiesto SHA256 y
+  conserva un parcial ante fallo. Incluye objetos privados, públicos y posters
+  referenciados por ORM; no recoge huérfanos ajenos a las tablas.
+- Coordinar una ventana sin escrituras/retiros para combinar pg_dump y objetos.
+  Copiar ambos offsite, conservar configuración y keystore, y ensayar restauración
+  aislada antes de considerar comprobada la recuperación. No publicar respaldos.
+- Una primera build web sin API ni caché útil falla, en lugar de desplegar HTML
+  de error con éxito. Recuperar backend antes de desplegar; en CI se usa fixture local.
+- La CI nueva prueba Django con PostgreSQL 16, web/tests/lint/build/audit de
+  producción y Android con JDK 21. Su ejecución en GitHub queda pendiente del push.
+
+Ver [estado y límites de la estabilización](stabilization.md).

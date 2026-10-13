@@ -163,6 +163,12 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    # Trust forwarded addresses only after configuring the deployment proxy chain.
+    "NUM_PROXIES": int(os.environ.get("AUTH_TRUSTED_PROXY_COUNT", "0")),
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": os.environ.get("AUTH_LOGIN_THROTTLE_RATE", "10/min"),
+        "auth_refresh": os.environ.get("AUTH_REFRESH_THROTTLE_RATE", "60/min"),
+    },
 }
 
 SIMPLE_JWT = {

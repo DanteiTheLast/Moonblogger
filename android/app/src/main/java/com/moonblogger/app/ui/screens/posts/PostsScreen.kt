@@ -149,6 +149,14 @@ fun PostsScreen(
                                     onClick = { onPostClick(post.id) },
                                 )
                             }
+                            if (state.hasMore) {
+                                item(key = "load_more") {
+                                    Button(onClick = viewModel::loadMore, enabled = !state.isLoadingMore && !state.isRefreshing) {
+                                        if (state.isLoadingMore) CircularProgressIndicator()
+                                        else Text("Cargar más publicaciones")
+                                    }
+                                }
+                            }
                         }
                     }
                 }

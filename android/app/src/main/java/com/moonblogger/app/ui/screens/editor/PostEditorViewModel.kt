@@ -7,7 +7,7 @@ import com.moonblogger.app.data.media.InspectedPhoto
 import com.moonblogger.app.data.media.LayoutMedia
 import com.moonblogger.app.data.media.MediaRepository
 import com.moonblogger.app.data.media.MediaUploadException
-import com.moonblogger.app.data.media.PhotoSourceProvider
+import com.moonblogger.app.data.media.PhotoSource
 import com.moonblogger.app.data.media.PhotoRejectionReason
 import com.moonblogger.app.data.model.CarouselTransition
 import com.moonblogger.app.data.model.PostMedia
@@ -39,6 +39,12 @@ data class EditorMedia(
 data class PostEditorUiState(
     val isEdit: Boolean = false,
     val isLoading: Boolean = false,
+    val loadError: String? = null,
+    val localRecoveryError: Boolean = false,
+    val localNotice: String? = null,
+    val localCopyAvailable: Boolean = false,
+    val hasChanges: Boolean = false,
+    val needsPhotoReview: Boolean = false,
     val title: String = "",
     val content: String = "",
     val status: PostStatus = PostStatus.DRAFT,
@@ -56,34 +62,112 @@ data class PostEditorUiState(
     val isSaved: Boolean = false,
 ) {
     val canSubmit: Boolean
-        get() = title.isNotBlank() && content.isNotBlank() && !isSaving && !isInspecting && !isLoading
+        get() = title.isNotBlank() && content.isNotBlank() && !isSaving && !isInspecting && !isLoading && loadError == null && !needsPhotoReview
 }
 
 /** Editor de posts y fotos: las cargas se completan antes de publicar. */
 class PostEditorViewModel(
     private val repository: PostRepository,
     private val mediaRepository: MediaRepository,
-    private val photoSourceProvider: PhotoSourceProvider,
+    private val photoSourceProvider: PhotoSource,
     private val postId: Long?,
+    private val draftStore: EditorDraftStore? = null,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(PostEditorUiState(isEdit = postId != null))
+    private val _uiState = MutableStateFlow(PostEditorUiState(isEdit = postId != null, isLoading = postId != null))
     val uiState: StateFlow<PostEditorUiState> = _uiState.asStateFlow()
     private var initialLoadStarted = false
-    // Conserva el borrador creado durante un reintento mientras este ViewModel viva.
-    // No se persiste: la reanudación tras finalizar el proceso es deuda explícita.
     private var workingPostId: Long? = postId
+    private var originalStatus: PostStatus = PostStatus.DRAFT
+
+    init {
+        try {
+            draftStore?.load()?.let { draft ->
+                workingPostId = draft.workingPostId
+                originalStatus = draft.originalStatus
+                initialLoadStarted = true
+                _uiState.value = PostEditorUiState(
+                    isEdit = postId != null, title = draft.title, content = draft.content,
+                    status = draft.status, transition = draft.transition,
+                    media = draft.media.map { EditorMedia(it.key, it.mediaId, kind = it.kind,
+                        mimeType = it.mimeType, altText = it.altText, caption = it.caption, isCover = it.isCover) }.ensureCover(),
+                    deletedMediaIds = draft.deletedMediaIds, isMediaDirty = draft.isMediaDirty,
+                    localCopyAvailable = true, hasChanges = true, needsPhotoReview = draft.omittedLocalPhotos,
+                    localNotice = if (draft.omittedLocalPhotos) "Se recuperó el escrito. Las fotos que no terminaron de subir no se conservan: vuelve a elegirlas antes de guardar."
+                        else "Se recuperó una copia local del escrito y los pasos de guardado confirmados.",
+                )
+            }
+        } catch (_: Exception) {
+            _uiState.update { it.copy(isLoading = false, localRecoveryError = true, loadError = "No se pudo leer la copia local. Vuelve a abrir el editor para intentarlo otra vez, o descártala explícitamente para continuar.") }
+            initialLoadStarted = true
+        }
+    }
+
+    fun acknowledgeMissingPhotos() {
+        _uiState.update { it.copy(needsPhotoReview = false) }
+        persist()
+    }
+
+    private fun persist() {
+        val state = _uiState.value
+        if (!state.hasChanges || state.loadError != null || state.isSaved) return
+        val store = draftStore
+        if (store == null) {
+            _uiState.update { it.copy(localCopyAvailable = false, localNotice = "No se pudo identificar la cuenta para guardar una copia local. Conserva el escrito antes de salir.") }
+            return
+        }
+        try {
+            store.save(EditorDraft(workingPostId, originalStatus, state.title, state.content, state.status,
+                state.transition, state.media.mapNotNull { item -> item.mediaId?.let {
+                    DraftMedia(item.key, it, item.kind, item.mimeType, item.altText, item.caption, item.isCover)
+                } }, state.deletedMediaIds, state.isMediaDirty, state.needsPhotoReview || state.media.any { it.mediaId == null && it.isLocal }))
+            _uiState.update { it.copy(localCopyAvailable = true,
+                localNotice = if (it.localNotice?.startsWith("No se pudo guardar") == true) null else it.localNotice) }
+        } catch (_: Exception) {
+            _uiState.update { it.copy(localCopyAvailable = false, localNotice = "No se pudo guardar la copia local. Conserva el escrito antes de salir.") }
+        }
+    }
+
+    private fun change(transform: (PostEditorUiState) -> PostEditorUiState) {
+        if (_uiState.value.isSaving || _uiState.value.isLoading || _uiState.value.loadError != null) return
+        _uiState.update { transform(it).copy(hasChanges = true) }
+        persist()
+    }
+
+    fun discardLocal(): Boolean = try {
+        draftStore?.clear()
+        _uiState.value.media.mapNotNull { it.localPhoto }.forEach(photoSourceProvider::release)
+        true
+    } catch (_: Exception) {
+        _uiState.update { it.copy(error = "No se pudo descartar la copia local. Inténtalo otra vez.") }
+        false
+    }
+
+    fun discardFailedRecovery() {
+        if (!_uiState.value.localRecoveryError || !discardLocal()) return
+        workingPostId = postId
+        initialLoadStarted = false
+        _uiState.value = PostEditorUiState(isEdit = postId != null, isLoading = postId != null)
+        start()
+    }
+
+    fun retryLoad() {
+        if (_uiState.value.loadError == null || _uiState.value.hasChanges || _uiState.value.localRecoveryError) return
+        initialLoadStarted = false
+        start()
+    }
 
     fun start() {
         val id = postId ?: return
         if (initialLoadStarted) return
         initialLoadStarted = true
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, loadError = null) }
             repository.getPost(id)
                 .onSuccess { post ->
+                    originalStatus = post.status
                     val media = post.media
-                        .filter { it.state == READY_STATE }
+                        .filter { it.state == READY_STATE && it.position != null }
                         .sortedWith(compareBy<PostMedia> { it.position ?: Int.MAX_VALUE }.thenBy { it.id })
                         .map { it.toEditorMedia() }
                         .ensureCover()
@@ -99,26 +183,26 @@ class PostEditorViewModel(
                     }
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, error = ApiErrors.userMessage(error)) }
+                    _uiState.update { it.copy(isLoading = false, loadError = ApiErrors.userMessage(error)) }
                 }
         }
     }
 
-    fun onTitleChange(value: String) = _uiState.update { it.copy(title = value.take(MAX_TITLE_LENGTH), error = null) }
+    fun onTitleChange(value: String) = change { it.copy(title = value.take(MAX_TITLE_LENGTH), error = null) }
 
-    fun onContentChange(value: String) = _uiState.update { it.copy(content = value, error = null) }
+    fun onContentChange(value: String) = change { it.copy(content = value, error = null) }
 
-    fun onStatusChange(value: PostStatus) = _uiState.update { it.copy(status = value, error = null) }
+    fun onStatusChange(value: PostStatus) = change { it.copy(status = value, error = null) }
 
     fun onTransitionChange(value: CarouselTransition) =
-        _uiState.update { it.copy(transition = value, isMediaDirty = true, error = null) }
+        change { it.copy(transition = value, isMediaDirty = true, error = null) }
 
     /** Se invoca con URIs otorgados temporalmente por Photo Picker, nunca con permiso de galería. */
     fun onPhotosSelected(uris: List<Uri>) {
         if (uris.isEmpty()) return
         var inspectionStarted = false
         _uiState.update { state ->
-            if (state.isSaving || state.isInspecting) {
+            if (state.isSaving || state.isInspecting || state.isLoading || state.loadError != null) {
                 state
             } else {
                 inspectionStarted = true
@@ -151,15 +235,17 @@ class PostEditorViewModel(
                     media = (it.media + accepted).ensureCover(),
                     isMediaDirty = it.isMediaDirty || accepted.isNotEmpty(),
                     isInspecting = false,
+                    hasChanges = it.hasChanges || accepted.isNotEmpty(),
                     error = selectionMessage(inspected.rejections.map { rejection -> rejection.reason }, omittedForCapacity),
                 )
             }
+            persist()
         }
     }
 
     fun removeMedia(key: String) {
-        _uiState.update { state ->
-            val item = state.media.firstOrNull { it.key == key } ?: return@update state
+        change { state ->
+            val item = state.media.firstOrNull { it.key == key } ?: return@change state
             item.localPhoto?.let(photoSourceProvider::release)
             state.copy(
                 media = state.media.filterNot { it.key == key }.ensureCover(),
@@ -171,10 +257,10 @@ class PostEditorViewModel(
     }
 
     fun moveMedia(key: String, offset: Int) {
-        _uiState.update { state ->
+        change { state ->
             val from = state.media.indexOfFirst { it.key == key }
             val to = from + offset
-            if (from !in state.media.indices || to !in state.media.indices) return@update state
+            if (from !in state.media.indices || to !in state.media.indices) return@change state
             val reordered = state.media.toMutableList().apply {
                 val item = removeAt(from)
                 add(to, item)
@@ -183,7 +269,7 @@ class PostEditorViewModel(
         }
     }
 
-    fun setCover(key: String) = _uiState.update { state ->
+    fun setCover(key: String) = change { state ->
         state.copy(
             media = state.media.map { it.copy(isCover = it.key == key) },
             isMediaDirty = true,
@@ -196,7 +282,7 @@ class PostEditorViewModel(
     fun onCaptionChange(key: String, value: String) = updateMedia(key) { it.copy(caption = value.take(MAX_CAPTION_LENGTH)) }
 
     private fun updateMedia(key: String, transform: (EditorMedia) -> EditorMedia) {
-        _uiState.update { state ->
+        change { state ->
             state.copy(
                 media = state.media.map { if (it.key == key) transform(it) else it },
                 isMediaDirty = true,
@@ -207,42 +293,51 @@ class PostEditorViewModel(
 
     fun save() {
         val snapshot = _uiState.value
-        if (snapshot.isInspecting) return
+        if (snapshot.isSaving || snapshot.isInspecting || snapshot.isLoading || snapshot.loadError != null || snapshot.needsPhotoReview) return
         val title = snapshot.title.trim()
         val content = snapshot.content.trim()
         if (title.isBlank() || content.isBlank()) {
             _uiState.update { it.copy(error = "El título y el contenido no pueden estar vacíos.") }
             return
         }
+        _uiState.update { it.copy(isSaving = true, hasChanges = true) }
+        persist()
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null, uploadMessage = null) }
             if (!snapshot.isMediaDirty) {
-                val result = if (postId == null) {
+                val result = if (workingPostId == null) {
                     repository.createPost(title, content, snapshot.status, snapshot.transition)
                 } else {
-                    repository.updatePost(postId, title, content, snapshot.status, snapshot.transition)
+                    repository.updatePost(requireNotNull(workingPostId), title, content, snapshot.status, snapshot.transition)
                 }
+                result.onSuccess { workingPostId = it.id; persist() }
                 finish(result.exceptionOrNull())
                 return@launch
             }
 
-            // El post queda en draft durante cualquier cambio de media: ningún asset pendiente puede publicarse.
+            // New uploads stay hidden until layout; keep the existing publication status.
             val draft = if (workingPostId == null) {
                 repository.createPost(title, content, PostStatus.DRAFT, snapshot.transition)
             } else {
-                repository.updatePost(
-                    requireNotNull(workingPostId),
-                    title,
-                    content,
-                    PostStatus.DRAFT,
-                    snapshot.transition,
-                )
+                repository.updatePostContent(requireNotNull(workingPostId), title, content, snapshot.transition)
             }
             val post = draft.getOrElse { error ->
                 finish(error)
                 return@launch
             }
             workingPostId = post.id
+            persist()
+
+            // Free confirmed removals before uploading replacements at the ten-photo limit.
+            for (mediaId in _uiState.value.deletedMediaIds.toList()) {
+                val deletion = mediaRepository.deleteMedia(post.id, mediaId)
+                if (deletion.isFailure) {
+                    finish(deletion.exceptionOrNull(), partial = true)
+                    return@launch
+                }
+                _uiState.update { it.copy(deletedMediaIds = it.deletedMediaIds - mediaId) }
+                persist()
+            }
 
             val localToUpload = _uiState.value.media.filter { it.isLocal && it.mediaId == null }
             for ((index, item) in localToUpload.withIndex()) {
@@ -253,11 +348,22 @@ class PostEditorViewModel(
                     )
                 }
                 val file = photoSourceProvider.uploadFile(requireNotNull(item.localPhoto))
-                val upload = withContext(Dispatchers.IO) { mediaRepository.uploadPhoto(post.id, file) }
+                val upload = withContext(Dispatchers.IO) { mediaRepository.uploadPhoto(post.id, file) { intentId ->
+                    // Persist the intent before transferring bytes: a process restart can clean it up.
+                    _uiState.update { it.copy(deletedMediaIds = it.deletedMediaIds + intentId) }
+                    persist()
+                } }
                 val mediaId = upload.getOrElse { error ->
                     // Evita que un intent fallido consuma uno de los diez huecos en el siguiente intento.
-                    if (error is MediaUploadException) mediaRepository.deleteMedia(post.id, error.mediaId)
-                    finish(error, keptAsDraft = true)
+                    if (error is MediaUploadException) {
+                        _uiState.update { it.copy(deletedMediaIds = it.deletedMediaIds + error.mediaId) }
+                        persist()
+                        if (mediaRepository.deleteMedia(post.id, error.mediaId).isSuccess) {
+                            _uiState.update { it.copy(deletedMediaIds = it.deletedMediaIds - error.mediaId) }
+                            persist()
+                        }
+                    }
+                    finish(error, partial = true)
                     return@launch
                 }
                 _uiState.update { state ->
@@ -266,8 +372,10 @@ class PostEditorViewModel(
                             if (current.key == item.key) current.copy(mediaId = mediaId) else current
                         },
                         uploadProgress = (index + 1) to localToUpload.size,
+                        deletedMediaIds = state.deletedMediaIds - mediaId,
                     )
                 }
+                persist()
             }
 
             val finalMedia = _uiState.value.media
@@ -276,14 +384,7 @@ class PostEditorViewModel(
                 val mediaId = requireNotNull(item.mediaId)
                 val metadata = mediaRepository.updateMetadata(post.id, mediaId, item.altText.trim(), item.caption.trim())
                 if (metadata.isFailure) {
-                    finish(metadata.exceptionOrNull(), keptAsDraft = true)
-                    return@launch
-                }
-            }
-            for (mediaId in _uiState.value.deletedMediaIds) {
-                val deletion = mediaRepository.deleteMedia(post.id, mediaId)
-                if (deletion.isFailure) {
-                    finish(deletion.exceptionOrNull(), keptAsDraft = true)
+                    finish(metadata.exceptionOrNull(), partial = true)
                     return@launch
                 }
             }
@@ -293,26 +394,32 @@ class PostEditorViewModel(
                 _uiState.value.transition,
             )
             if (layout.isFailure) {
-                finish(layout.exceptionOrNull(), keptAsDraft = true)
+                finish(layout.exceptionOrNull(), partial = true)
                 return@launch
             }
             _uiState.update { it.copy(uploadMessage = "Actualizando la publicación…") }
-            finish(repository.updatePost(post.id, title, content, snapshot.status, snapshot.transition).exceptionOrNull())
+            finish(repository.updatePost(post.id, title, content, snapshot.status, snapshot.transition).exceptionOrNull(), partial = true)
         }
     }
 
-    private fun finish(error: Throwable?, keptAsDraft: Boolean = false) {
-        if (error == null) photoSourceProvider.clearTemporaryFiles()
+    private fun finish(error: Throwable?, partial: Boolean = false) {
+        if (error == null) {
+            try { draftStore?.clear() } catch (_: Exception) {
+                _uiState.update { it.copy(isSaving = false, error = "Se guardó en el servidor, pero no se pudo eliminar la copia local. No vuelvas a guardar; sal del editor y descarta la copia al abrirlo.") }
+                return
+            }
+            _uiState.value.media.mapNotNull { it.localPhoto }.forEach(photoSourceProvider::release)
+        }
         _uiState.update {
             if (error == null) {
-                it.copy(isSaving = false, uploadProgress = null, uploadMessage = null, isSaved = true)
+                it.copy(isSaving = false, uploadProgress = null, uploadMessage = null, isSaved = true, hasChanges = false)
             } else {
                 it.copy(
                     isSaving = false,
                     uploadProgress = null,
                     uploadMessage = null,
-                    error = if (keptAsDraft) {
-                        "No se completaron las fotos; la publicación se guardó como borrador. ${ApiErrors.userMessage(error)}"
+                    error = if (partial) {
+                        "El guardado quedó incompleto; algunos cambios ya están en el servidor. Tu copia local permite reintentar. ${ApiErrors.userMessage(error)}"
                     } else {
                         ApiErrors.userMessage(error)
                     },
@@ -322,7 +429,7 @@ class PostEditorViewModel(
     }
 
     override fun onCleared() {
-        photoSourceProvider.clearTemporaryFiles()
+        _uiState.value.media.mapNotNull { it.localPhoto }.forEach(photoSourceProvider::release)
         super.onCleared()
     }
 

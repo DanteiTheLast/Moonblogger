@@ -57,7 +57,7 @@ enum class CarouselTransition {
 data class PostRequest(
     val title: String,
     val content: String,
-    val status: PostStatus,
+    val status: PostStatus? = null,
     val carousel_transition: CarouselTransition = CarouselTransition.SLIDE,
 )
 

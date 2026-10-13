@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CarouselTransition, PostMedia } from "@/lib/types";
 import {
   getMediaAspectRatio,
+  handleCarouselKey,
   getSlideIndex,
   normalizeCarouselTransition,
   orderMedia,
@@ -48,19 +49,7 @@ export default function MediaCarousel({ media, transition }: MediaCarouselProps)
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      moveSlide(-1);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      moveSlide(1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      selectSlide(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      selectSlide(items.length - 1);
-    }
+    handleCarouselKey(event, moveSlide, selectSlide, items.length);
   }
 
   const mediaUrl = activeItem.url ?? undefined;

@@ -14,10 +14,11 @@
 }
 
 .heroTitle {
+  overflow-wrap: anywhere;
   font-family: var(--font-display);
   font-weight: 600;
   line-height: 1.2;
-  font-size: clamp(2.25rem, 10vw, 3.75rem);
+  font-size: clamp(2rem, 4.5vw, 3rem);
   color: var(--ink-primary);
 }
 
@@ -57,14 +58,31 @@
   }
 
   .heroContent {
-    flex: 1 1 50%;
+    flex: 1 1 55%;
   }
 
   .heroScene {
-    width: min(45%, 26rem);
+    flex: 0 1 40%;
+    min-width: 0;
+    width: 40%;
   }
 
   .list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.pagination a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }

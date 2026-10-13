@@ -77,3 +77,5 @@ cd backend && .venv/bin/python manage.py test posts   # API
 cd web && npm test && npm run lint                     # Web
 cd android && ./gradlew :app:testDebugUnitTest        # Android (JVM)
 ```
+
+Correcciones y verificación: [estabilización](docs/stabilization.md).

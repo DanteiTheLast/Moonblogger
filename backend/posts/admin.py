@@ -19,7 +19,7 @@ class PostAdmin(admin.ModelAdmin):
     list_display = ("title", "slug", "status", "author", "published_at", "created_at", "updated_at")
     list_filter = ("status", "author")
     search_fields = ("title", "content", "slug")
-    readonly_fields = ("created_at", "updated_at", "published_at")
+    readonly_fields = ("slug", "status", "created_at", "updated_at", "published_at")
     list_select_related = ("author",)
 
 
@@ -29,7 +29,11 @@ class PostMediaAdmin(admin.ModelAdmin):
     list_filter = ("kind", "state", "is_cover")
     search_fields = ("private_object_key", "public_object_key", "post__title")
     list_select_related = ("post",)
-    readonly_fields = ("id", "created_at", "updated_at", "ready_at")
+    readonly_fields = tuple(field.name for field in PostMedia._meta.fields)
+
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
 
 
 @admin.register(StorageDeletionTask)
@@ -37,4 +41,8 @@ class StorageDeletionTaskAdmin(admin.ModelAdmin):
     list_display = ("object_key", "bucket", "attempts", "completed_at", "created_at")
     list_filter = ("bucket", "completed_at")
     search_fields = ("object_key", "last_error")
-    readonly_fields = ("id", "created_at", "completed_at", "attempts", "last_error")
+    readonly_fields = tuple(field.name for field in StorageDeletionTask._meta.fields)
+
+    def has_add_permission(self, request): return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False

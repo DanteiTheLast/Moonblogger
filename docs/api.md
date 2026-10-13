@@ -64,8 +64,9 @@ devuelven; replay válido responde 204 sin incrementar.
 }
 ```
 
-- `published_at` se fija automáticamente al pasar a `published` y se limpia al
-  volver a `draft`.
+- `published_at` conserva la fecha de la primera publicación, incluso al volver a
+  `draft` y republicar. Un borrador nunca publicado mantiene `null`. El endpoint
+  público sigue filtrando exclusivamente por `status=published`.
 - El `slug` se auto-genera desde el título (único, con desempate `-2`, `-3`…).
 - Listado público ordenado por `published_at` desc; listado privado por
   `updated_at` (o `created_at`) desc, con `id` como desempate.
@@ -146,11 +147,13 @@ nunca en Android, web ni repositorio.
 4. Llamar a `complete` con el `media_id`; solo entonces el elemento puede entrar
    al layout.
 
-Al publicar, las claves inmutables se copian al bucket público. Al despublicar
-un post o retirar un asset del layout publicado, el backend borra las claves
-públicas mediante outbox y las limpia de la BD; una republicación las copia de
-nuevo. CDNs pueden servir una versión en caché transitoriamente hasta que su
-TTL propio venza; no es una garantía de revocación instantánea.
+Al publicar, los objetos privados se copian a claves públicas nuevas por
+promoción. Repetir un layout ya publicado conserva sus claves. Al despublicar
+o retirar un asset, se limpian sus referencias públicas en BD y se encola su
+borrado. Tras commit se intenta un lote acotado; los fallos quedan para
+`cleanup_media_storage`. Republicar utiliza destinos nuevos para que una
+eliminación antigua no alcance la publicación actual. CDNs pueden conservar
+versiones hasta su TTL; no hay garantía de revocación instantánea.
 
 La eliminación remota usa el contrato de Supabase
 `DELETE /storage/v1/object/{bucket}` con cuerpo `{"prefixes":[key]}`. Las

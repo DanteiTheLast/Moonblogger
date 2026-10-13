@@ -45,14 +45,20 @@ enum class PhotoRejectionReason {
  * Los temporales se mantienen mientras el editor vive; cacheDir puede perderse
  * tras process death, por lo que el borrador local no se puede reanudar entonces.
  */
+interface PhotoSource {
+    fun inspect(uris: List<Uri>): PhotoSelectionResult
+    fun uploadFile(photo: InspectedPhoto): UploadFile
+    fun release(photo: InspectedPhoto)
+}
+
 class PhotoSourceProvider(
     private val contentResolver: ContentResolver,
     private val cacheDir: File,
-) {
+) : PhotoSource {
     private val temporaryFiles = mutableSetOf<File>()
     private val temporaryFilesLock = Any()
 
-    fun inspect(uris: List<Uri>): PhotoSelectionResult {
+    override fun inspect(uris: List<Uri>): PhotoSelectionResult {
         val accepted = mutableListOf<InspectedPhoto>()
         val rejections = mutableListOf<PhotoRejection>()
         uris.forEach { uri ->
@@ -64,7 +70,7 @@ class PhotoSourceProvider(
         return PhotoSelectionResult(accepted, rejections)
     }
 
-    fun uploadFile(photo: InspectedPhoto): UploadFile = UploadFile(
+    override fun uploadFile(photo: InspectedPhoto): UploadFile = UploadFile(
         mimeType = photo.mimeType,
         sizeBytes = photo.sizeBytes,
         width = photo.width,
@@ -75,7 +81,7 @@ class PhotoSourceProvider(
     )
 
     /** Borra una copia que ya no pertenece al editor, por ejemplo al quitar una foto. */
-    fun release(photo: InspectedPhoto) = deleteTemporaryFile(photo.localFile)
+    override fun release(photo: InspectedPhoto) = deleteTemporaryFile(photo.localFile)
 
     /** Borra todas las copias del editor al terminar correctamente o destruir su ViewModel. */
     fun clearTemporaryFiles() {

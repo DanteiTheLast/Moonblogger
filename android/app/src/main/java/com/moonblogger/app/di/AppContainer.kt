@@ -107,5 +107,12 @@ class AppContainer(context: Context) {
     val mediaRepository: MediaRepository = MediaRepository(postsApi, SignedUrlUploader(signedUploadOkHttpClient))
     val photoSourceProvider: PhotoSourceProvider = PhotoSourceProvider(appContext.contentResolver, appContext.cacheDir)
 
+    fun editorDraftStore(postId: Long?): com.moonblogger.app.ui.screens.editor.EditorDraftStore? {
+        val account = com.moonblogger.app.core.JwtDecoder.userId(tokenStore.accessToken) ?: return null
+        return com.moonblogger.app.ui.screens.editor.FileEditorDraftStore(
+            appContext.noBackupFilesDir, account, BuildConfig.API_BASE_URL, postId,
+        )
+    }
+
     val viewModelFactory: MoonBloggerViewModelFactory = MoonBloggerViewModelFactory(this)
 }

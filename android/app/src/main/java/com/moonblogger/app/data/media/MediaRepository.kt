@@ -34,7 +34,7 @@ class MediaRepository(
     private val postsApi: PostsApi,
     private val signedUrlUploader: SignedUrlUploader,
 ) {
-    suspend fun uploadPhoto(postId: Long, file: UploadFile): Result<String> = safeApiCall {
+    suspend fun uploadPhoto(postId: Long, file: UploadFile, onIntentCreated: (String) -> Unit = {}): Result<String> = safeApiCall {
         val intent = postsApi.createUploadIntent(
             postId,
             UploadIntentRequest(
@@ -46,6 +46,7 @@ class MediaRepository(
             ),
         )
         try {
+            onIntentCreated(intent.media_id)
             signedUrlUploader.put(intent.upload_url, file)
             postsApi.completeMedia(postId, CompleteMediaRequest(intent.media_id)).media_id
         } catch (error: CancellationException) {
@@ -61,7 +62,13 @@ class MediaRepository(
         }
 
     suspend fun deleteMedia(postId: Long, mediaId: String): Result<Unit> =
-        safeApiCall { postsApi.deleteMedia(postId, mediaId) }
+        safeApiCall {
+            try { postsApi.deleteMedia(postId, mediaId) }
+            catch (error: retrofit2.HttpException) {
+                // DELETE of a known ID may already have succeeded before a lost response.
+                if (error.code() != 404) throw error
+            }
+        }
 
     suspend fun updateLayout(
         postId: Long,

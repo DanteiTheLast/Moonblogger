@@ -68,3 +68,10 @@ sin reescribir).
 
 La API recibe eventos firmados del proxy y persiste analítica mínima en Django
 ORM/PostgreSQL. Ningún cliente accede directamente a la base de datos.
+
+## Estado de corrección — 13/10/2026
+
+Primera estabilización de editor/sesión Android, publicación/retirada de fotos,
+archivo paginado, errores ISR, reflujo, readiness, backups de objetos y CI.
+No confundir cambios locales con despliegue: consultar stabilization.md para
+validación, contratos ajustados, límites y estado de producción.

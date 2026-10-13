@@ -202,3 +202,25 @@ qué alternativas se consideraron.
 Las visitas internas usan HMAC y no aceptan IP en el body; así el proxy es la
 única fuente confiable. Se almacena una fila diaria por IP/path para limitar el
 volumen y preservar agregación básica.
+
+## D14 — Estabilización editorial (13/10/2026)
+
+- Borradores Android privados por cuenta/API/post, con texto y checkpoints
+  atómicos fuera de backups del sistema. Fotos no confirmadas requieren volver
+  a seleccionarse y revisión explícita; no se persisten URLs firmadas ni tokens.
+- Refresh inválido cierra sesión; errores transitorios conservan credenciales
+  y escrito. Edición inicial fallida no permite PATCH de un formulario vacío.
+- Preparar cambios de media omite status para no revertir una publicación ya
+  confirmada por servidor. Layout/promoción publica los assets listos. Borrados
+  confirmados son idempotentes y preceden uploads para permitir sustitución al límite.
+- Nuevas claves públicas por promoción y limpieza posterior al commit evitan
+  conflictos y borrados tardíos sobre republicaciones. Se conserva published_at
+  original. Locks Post→Media coordinan edición, retirada y layout.
+- ISR home/sitemap se conserva, propagando errores y cacheando sólo resultados
+  completos. Archivo web usa /archive/[page]; Android pagina con Cargar más.
+  Presupuesto total de solicitudes web: 75 s.
+- Ventajas: conservar arquitectura actual y evitar nuevas dependencias de colas.
+  Costes: cleanup requiere reintentos periódicos; no hay snapshot único BD/Storage
+  ni idempotencia de POST creación cuando se pierde la respuesta.
+- Este registro supera los detalles anteriores que reiniciaban published_at,
+  reutilizaban claves públicas, presupuestaban 280 s o asumían autorreanudar Supabase.

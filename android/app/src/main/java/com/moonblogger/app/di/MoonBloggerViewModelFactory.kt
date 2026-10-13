@@ -45,7 +45,8 @@ class MoonBloggerViewModelFactory(
                     repository = container.postRepository,
                     mediaRepository = container.mediaRepository,
                     photoSourceProvider = container.photoSourceProvider,
-                    postId = (savedStateHandle.get<Long>("postId") as Long?)?.takeIf { it >= 0 },
+                    postId = savedStateHandle.get<Long>("postId")?.takeIf { it >= 0 },
+                    draftStore = container.editorDraftStore(savedStateHandle.get<Long>("postId")?.takeIf { it >= 0 }),
                 )
 
             else -> throw IllegalArgumentException("ViewModel desconocido: ${modelClass.name}")

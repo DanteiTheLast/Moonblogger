@@ -1,5 +1,7 @@
 """Small, replaceable Supabase Storage REST adapter (no file bytes pass Django)."""
 
+from http.client import HTTPException
+import hashlib
 import json
 import logging
 import re
@@ -98,7 +100,7 @@ class SupabaseStorage:
             if operation == "object_info":
                 raise StorageRequestError(exc.code, provider_code, request_id) from exc
             raise StorageError("Supabase Storage no pudo completar la operación.") from exc
-        except URLError as exc:
+        except (URLError, TimeoutError, ConnectionError, HTTPException) as exc:
             if operation == "object_info":
                 raise StorageError(
                     "Supabase Storage no está disponible para verificar el objeto."
@@ -196,7 +198,7 @@ class SupabaseStorage:
         except (AttributeError, TypeError, ValueError) as exc:
             raise StorageError("Supabase Storage devolvió encabezados de objeto inválidos.") from exc
 
-    def promote(self, object_key):
+    def promote(self, object_key, destination_key=None):
         self._request(
             "POST",
             "/object/copy",
@@ -204,7 +206,7 @@ class SupabaseStorage:
                 "bucketId": self.private_bucket,
                 "sourceKey": object_key,
                 "destinationBucket": self.public_bucket,
-                "destinationKey": object_key,
+                "destinationKey": destination_key or object_key,
             },
         )
 
@@ -218,6 +220,37 @@ class SupabaseStorage:
         except StorageObjectNotFound:
             # Storage deletion is idempotent: an already absent object is clean.
             return
+
+    def download_to(self, bucket, object_key, destination, max_bytes):
+        """Stream authenticated bytes to an already-private local file."""
+        if not bucket or "/" in bucket or "\\" in bucket or bucket in {".", ".."}:
+            raise StorageError("Bucket de respaldo inválido.")
+        if not object_key or "\\" in object_key or any(part in {".", ".."} for part in object_key.split("/")):
+            raise StorageError("Clave de respaldo inválida.")
+        request = Request(
+            f"{self.base_url}/storage/v1/object/{quote(bucket, safe='')}/{quote(object_key, safe='/')}",
+            headers={"Authorization": f"Bearer {self.service_role_key}", "apikey": self.service_role_key},
+        )
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with urlopen(request, timeout=10) as response:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise StorageError("Un objeto supera el límite de bytes del respaldo.")
+                    destination.write(chunk)
+                    digest.update(chunk)
+        except HTTPError as exc:
+            if exc.code == 404:
+                raise StorageObjectNotFound("Falta un objeto referenciado en Storage.") from exc
+            raise StorageError("Storage rechazó la descarga del respaldo.") from exc
+        except (URLError, TimeoutError, ConnectionError, HTTPException) as exc:
+            raise StorageError("Storage no pudo completar la descarga del respaldo.") from exc
+        return size, digest.hexdigest()
 
     def public_url(self, object_key):
         return (

@@ -5,7 +5,11 @@ import {
   getApiBaseUrl,
   getPublishedPostBySlug,
   getPublishedPosts,
+  getPublishedPostsPage,
+  getAllPublishedPosts,
 } from "./api";
+vi.mock("next/cache", () => ({ unstable_cache: (callback: unknown) => callback }));
+
 import type { Post, PostListItem, PostListResponse } from "./types";
 
 const MOCK_POST: Post = {
@@ -95,7 +99,7 @@ describe("getPublishedPosts", () => {
       "http://api.test/api/v1/public/posts/",
       expect.objectContaining({
         headers: { Accept: "application/json" },
-        next: { revalidate: 3600, tags: ["posts"] },
+        cache: "no-store",
         signal: expect.any(AbortSignal),
       }),
     );
@@ -123,7 +127,7 @@ describe("getPublishedPosts", () => {
 
     await expect(promise).rejects.toBeInstanceOf(ApiError);
     await expect(promise).rejects.toMatchObject({ status: 500 });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("lanza ApiError (status 0) si no hay conexión (con reintentos)", async () => {
@@ -135,7 +139,7 @@ describe("getPublishedPosts", () => {
     await flushRetryTimers(promise);
 
     await expect(promise).rejects.toMatchObject({ status: 0 });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("reintenta tras un fallo de conexión transitorio y tiene éxito", async () => {
@@ -180,7 +184,7 @@ describe("getPublishedPostBySlug", () => {
       "http://api.test/api/v1/public/posts/bienvenida/",
       expect.objectContaining({
         headers: { Accept: "application/json" },
-        next: { revalidate: 3600, tags: ["posts"] },
+        cache: "no-store",
         signal: expect.any(AbortSignal),
       }),
     );
@@ -198,5 +202,45 @@ describe("getPublishedPostBySlug", () => {
     if (error instanceof ApiError) {
       expect(error.status).toBe(404);
     }
+  });
+});
+
+describe("archivo paginado", () => {
+  it("mantiene envelope para navegar sin seguir URLs arbitrarias de la API", async () => {
+    const payload = { count: 21, next: null, previous: "https://other.invalid", results: [MOCK_LIST_POST] };
+    const fetchMock = mockFetch(200, payload);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getPublishedPostsPage(2)).resolves.toEqual(payload);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://api.test/api/v1/public/posts/?page=2");
+  });
+  it("recorre todas las páginas del archivo para el sitemap", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ next: "https://untrusted.invalid", results: [MOCK_LIST_POST] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ next: null, results: [{ ...MOCK_LIST_POST, id: 2 }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const posts = await getAllPublishedPosts(getApiBaseUrl());
+    expect(posts.map(post => post.id)).toEqual([1, 2]);
+    expect(fetchMock.mock.calls[1][0]).toBe("http://api.test/api/v1/public/posts/?page=2");
+  });
+  it("no devuelve un archivo parcial si falla una página posterior", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ next: "next", results: [MOCK_LIST_POST] }) })
+      .mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getAllPublishedPosts(getApiBaseUrl())).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("presupuesto de arranque en frío", () => {
+  it("comparte 75 s entre intentos en vez de repetir timeouts completos", async () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => setTimeout(() => reject(new TypeError("timeout")), 65_000)))
+      .mockRejectedValue(new TypeError("offline")));
+    const result = getPublishedPosts().catch(error => error);
+    await vi.advanceTimersByTimeAsync(75_000);
+    expect(await result).toMatchObject({ status: 0 });
+    expect(timeout.mock.calls.map(call => call[0])).toEqual([65_000, 9_000]);
   });
 });

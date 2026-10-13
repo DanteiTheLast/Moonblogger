@@ -1,21 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getPublishedPosts } = vi.hoisted(() => ({
-  getPublishedPosts: vi.fn(),
+const { getPublishedPostsPage } = vi.hoisted(() => ({
+  getPublishedPostsPage: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({ getPublishedPosts }));
+vi.mock("@/lib/api", () => ({ getPublishedPostsPage, ApiError: class extends Error {} }));
 
 import HomePage from "./page";
 
 describe("HomePage", () => {
   beforeEach(() => {
-    getPublishedPosts.mockReset();
+    getPublishedPostsPage.mockReset();
   });
 
   it("shows the empty state only after a successful empty response", async () => {
-    getPublishedPosts.mockResolvedValue([]);
+    getPublishedPostsPage.mockResolvedValue({ results: [], next: null, previous: null });
 
     const markup = renderToStaticMarkup(await HomePage());
 
@@ -23,14 +23,8 @@ describe("HomePage", () => {
     expect(markup).not.toContain("No se pudieron cargar las publicaciones");
   });
 
-  it("distinguishes an API failure and offers a server-compatible retry link", async () => {
-    getPublishedPosts.mockRejectedValue(new Error("API unavailable"));
-
-    const markup = renderToStaticMarkup(await HomePage());
-
-    expect(markup).toContain("No se pudieron cargar las publicaciones");
-    expect(markup).toContain('href="/"');
-    expect(markup).toContain("Reintentar");
-    expect(markup).not.toContain("Todavía no hay publicaciones");
+  it("propaga un fallo al boundary en vez de cachear una pantalla de error como éxito", async () => {
+    getPublishedPostsPage.mockRejectedValue(new Error("API unavailable"));
+    await expect(HomePage()).rejects.toThrow("API unavailable");
   });
 });

@@ -54,16 +54,15 @@ class Post(models.Model):
             self.slug = self._generate_unique_slug()
         if self.status == self.Status.PUBLISHED and self.published_at is None:
             self.published_at = timezone.now()
-        elif self.status == self.Status.DRAFT:
-            self.published_at = None
         super().save(*args, **kwargs)
 
     def _generate_unique_slug(self):
-        base = slugify(self.title) or "post"
+        base = (slugify(self.title) or "post")[:self._meta.get_field("slug").max_length]
         slug = base
         counter = 2
         while Post.objects.filter(slug=slug).exists():
-            slug = f"{base}-{counter}"
+            suffix = f"-{counter}"
+            slug = f"{base[:200 - len(suffix)]}{suffix}"
             counter += 1
         return slug
 

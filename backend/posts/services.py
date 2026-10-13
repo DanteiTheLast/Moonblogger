@@ -1,7 +1,9 @@
 import logging
+import uuid
 from dataclasses import dataclass
 
-from django.db import transaction
+from django.db import transaction, connection
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -24,13 +26,11 @@ class MediaHousekeepingResult:
     storage_available: bool = True
 
 
-def run_media_housekeeping(limit=MEDIA_HOUSEKEEPING_BATCH_SIZE):
-    """Remove expired non-ready intents and retry a bounded deletion outbox batch.
+def run_media_housekeeping(limit=MEDIA_HOUSEKEEPING_BATCH_SIZE, *, expire_intents=True):
+    """Remove expired intents and retry bounded, idempotent Storage deletions.
 
-    Database cleanup is intentionally completed before contacting Storage.  Each
-    outbox item remains locked while its deletion is attempted, preserving the
-    existing at-most-one concurrent worker semantics without holding a lock for
-    the whole batch.
+    Object keys are immutable per publication. Remote deletion occurs outside
+    transactions; duplicate workers may safely delete the same retired object.
     """
     if limit < 1:
         raise ValueError("limit must be positive")
@@ -44,7 +44,8 @@ def run_media_housekeeping(limit=MEDIA_HOUSEKEEPING_BATCH_SIZE):
                 upload_expires_at__lte=now,
             )
             .order_by("upload_expires_at", "id")[:limit]
-        )
+        ) if expire_intents else []
+
         for media in expired:
             # The pre_delete signal writes durable StorageDeletionTask entries.
             media.delete()
@@ -64,36 +65,42 @@ def run_media_housekeeping(limit=MEDIA_HOUSEKEEPING_BATCH_SIZE):
         .values_list("id", flat=True)[:limit]
     )
     for task_id in task_ids:
+        task = StorageDeletionTask.objects.filter(pk=task_id, completed_at__isnull=True).first()
+        if task is None:
+            continue
+        # Protect legacy/reused keys as well as private source objects. New
+        # publications always allocate fresh public keys, avoiding a race with
+        # a DELETE already in flight for an earlier publication.
+        fields = ("private_object_key", "private_poster_key") if task.bucket == storage.private_bucket else ("public_object_key", "public_poster_key")
+        referenced = PostMedia.objects.filter(
+            Q(**{fields[0]: task.object_key}) | Q(**{fields[1]: task.object_key})
+        ).exists()
+        if referenced:
+            # Cancel stale work. A later withdrawal reactivates the same task.
+            StorageDeletionTask.objects.filter(pk=task_id, completed_at__isnull=True).update(completed_at=timezone.now(), last_error="")
+            continue
+        failed_delete = False
+        try:
+            storage.delete(task.bucket, task.object_key)
+        except StorageObjectNotFound:
+            pass
+        except StorageError:
+            failed_delete = True
+            logger.warning("Media housekeeping could not delete a Storage object; task retained for retry.")
+        # A brief transaction updates diagnostics only, never encloses network IO.
         with transaction.atomic():
-            try:
-                task = StorageDeletionTask.objects.select_for_update().get(pk=task_id)
-            except StorageDeletionTask.DoesNotExist:
-                continue
+            task = StorageDeletionTask.objects.select_for_update().get(pk=task_id)
             if task.completed_at:
                 continue
-            try:
-                storage.delete(task.bucket, task.object_key)
-            except StorageObjectNotFound:
-                # A missing object is already in the desired deleted state.
-                task.attempts += 1
-                task.last_error = ""
+            task.attempts += 1
+            task.last_error = "Storage no pudo completar la eliminación." if failed_delete else ""
+            if not failed_delete:
                 task.completed_at = timezone.now()
-                task.save(update_fields=["attempts", "last_error", "completed_at"])
-                completed += 1
-            except StorageError:
-                task.attempts += 1
-                # Storage adapters may wrap provider errors. Keep diagnostics
-                # useful without risking persistence of provider credentials.
-                task.last_error = "Storage no pudo completar la eliminación."
-                task.save(update_fields=["attempts", "last_error"])
-                failed += 1
-                logger.warning("Media housekeeping could not delete a Storage object; task retained for retry.")
-            else:
-                task.attempts += 1
-                task.last_error = ""
-                task.completed_at = timezone.now()
-                task.save(update_fields=["attempts", "last_error", "completed_at"])
-                completed += 1
+            task.save(update_fields=["attempts", "last_error", "completed_at"])
+        if failed_delete:
+            failed += 1
+        else:
+            completed += 1
 
     return MediaHousekeepingResult(
         expired_intents=len(expired),
@@ -137,25 +144,32 @@ def promote_active_media(media):
         return
     storage = get_storage()
     promoted = []
+    destinations = []
     try:
         for item in media:
-            if item.public_object_key == item.private_object_key:
+            if item.public_object_key and (not item.private_poster_key or item.public_poster_key):
                 continue
             if not item.private_object_key:
                 raise ValidationError({"media": ["Un elemento activo no tiene objeto privado."]})
-            storage.promote(item.private_object_key)
-            promoted.append(item.private_object_key)
-            if item.private_poster_key:
-                storage.promote(item.private_poster_key)
-                promoted.append(item.private_poster_key)
+            # Never reuse a withdrawn destination: stale deletion tasks and an
+            # in-flight DELETE can only affect the previous publication.
+            prefix = f"publications/{uuid.uuid4()}"
+            object_key = f"{prefix}/asset"
+            poster_key = f"{prefix}/poster" if item.private_poster_key else None
+            # Queue all attempted copies on failure, including a timeout that
+            # may have completed at the provider before the response was lost.
+            promoted.append(object_key)
+            storage.promote(item.private_object_key, destination_key=object_key)
+            if poster_key:
+                promoted.append(poster_key)
+                storage.promote(item.private_poster_key, destination_key=poster_key)
+            destinations.append((item, object_key, poster_key))
     except StorageError as exc:
         raise PromotionFailed(str(exc), storage.public_bucket, promoted) from exc
 
-    for item in media:
-        if item.public_object_key == item.private_object_key:
-            continue
-        item.public_object_key = item.private_object_key
-        item.public_poster_key = item.private_poster_key
+    for item, object_key, poster_key in destinations:
+        item.public_object_key = object_key
+        item.public_poster_key = poster_key
         item.save(update_fields=["public_object_key", "public_poster_key", "updated_at"])
 
 
@@ -202,6 +216,7 @@ def enqueue_storage_deletion(bucket, object_key):
         task.attempts = 0
         task.last_error = ""
         task.save(update_fields=["completed_at", "attempts", "last_error"])
+    schedule_storage_cleanup()
 
 
 def queue_public_deletion(object_key):
@@ -228,3 +243,22 @@ def withdraw_public_media(media):
             item.public_object_key = None
             item.public_poster_key = None
             item.save(update_fields=["public_object_key", "public_poster_key", "updated_at"])
+
+
+def retry_storage_deletions():
+    """Best effort after commit; persistent tasks remain available to the CLI."""
+    try:
+        run_media_housekeeping(expire_intents=False)
+    except Exception:
+        # Never turn an already committed edit into a misleading HTTP failure.
+        logger.exception("Post-commit Storage cleanup failed; durable tasks retained.")
+
+
+def schedule_storage_cleanup():
+    """Coalesce one bounded cleanup callback per transaction.
+
+    Django discards savepoint callbacks on rollback; inspecting its pending
+    callbacks avoids a connection flag that would survive that rollback.
+    """
+    if not any(callback is retry_storage_deletions for _, callback, _ in connection.run_on_commit):
+        transaction.on_commit(retry_storage_deletions, robust=True)

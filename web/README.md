@@ -15,8 +15,9 @@ Moon que el backend ha marcado como `published`.
 
 - Node 22 (probado con v22.23.2).
 - Backend de Django local en `http://127.0.0.1:8000` para ver contenido. Si la
-  API no responde durante el build, este no falla: las páginas se regeneran al
-  estar disponible la API o al recibir el webhook.
+  API no responde durante el build sin datos cacheados, el build falla. Esto evita
+  desplegar una pantalla de error como una página válida cacheada. Calienta o
+  recupera la API antes de reintentar el despliegue.
 - `API_BASE_URL`: URL base de la API (sin barra final). Se lee como variable de
   entorno en build; default `http://127.0.0.1:8000/api/v1`. Puedes copiar
   `.env.example` a `.env.local` para fijarla localmente.
@@ -65,9 +66,11 @@ Pasos una sola vez:
    fresco de la API).
 
 > Nota sobre el cold start de Render Free: la API se duerme a los 15 min sin
-> tráfico y tarda 30-60 s en arrancar. El cliente web usa un timeout de ~90 s
-> y reintenta automáticamente, por lo que el build normalmente aguanta el
-> arranque. Si aun así un build fallara, basta con re-ejecutarlo con el
+> tráfico y puede tardar 30-60 s en arrancar. El cliente reserva 65 s para
+> el primer intento y permite un segundo después de 1 s, dentro de un presupuesto
+> total de 75 s por consulta (también para el archivo completo del sitemap).
+> Configura un tiempo máximo de función compatible en el proveedor; si el límite
+> es menor, mantén la API activa o cambia su alojamiento. Si aun así un build fallara, basta con re-ejecutarlo con el
 > servicio ya caliente.
 
 Flujo de publicación:
@@ -80,9 +83,38 @@ Flujo de publicación:
 
 ## Rutas
 
-- `/` — listado de publicaciones publicadas.
+- `/` — primera página de publicaciones publicadas.
+- `/archive/[page]` — páginas antiguas con ISR, generadas al visitarlas.
 - `/posts/[slug]` — detalle de una publicación por slug con ISR.
 - `/sitemap.xml` — sitemap generado por una metadata route.
 - `/robots.txt` — reglas de rastreo generadas por una metadata route.
 - Los slugs no publicados (borradores o inexistentes) responden **404** desde
   la API pública y se muestran con `not-found.tsx`.
+
+## Recuperación y caché
+
+Sólo las respuestas exitosas se guardan en el caché de datos (tag `posts`, 1 h).
+Home y sitemap propagan los fallos: ISR conserva el último resultado útil cuando
+falla una regeneración temporal. El sitemap recorre todo el archivo y se guarda
+como unidad, sin publicar resultados parciales. El botón del boundary ejecuta
+`reset()` para volver a intentar el render. Una respuesta exitosa vacía se muestra
+como un blog sin publicaciones, separada de los fallos de conexión.
+
+El webhook mantiene `revalidateTag('posts', { expire: 0 })`: una retirada vence
+el caché de datos inmediatamente. Una retirada con la API sana devuelve 404 en
+la siguiente regeneración. La conservación de páginas anteriores de ISR durante
+una caída requiere verificar también el caché de rutas del proveedor; no basta
+con invalidar datos para prometer una retirada durante una caída completa.
+El build limpia el caché local deliberadamente;
+requiere una API sana. No constituye una recuperación de Render/Supabase.
+
+Dependencias: Next y eslint-config-next 16.3.8 corrigen los avisos que afectan
+16.3.0; sharp y source-map-js se actualizan dentro de sus rangos compatibles.
+Verificar `npm audit --omit=dev` antes del despliegue.
+
+La auditoría completa conserva cinco avisos altos en herramientas de lint
+(`braces` → `micromatch` → `fast-glob` → plugin/config de Next), sin parche
+compatible anunciado. La sugerencia automática rebaja Next ESLint a 14;
+no se aplica. Vitest 4.1.11 corrige el aviso de su mocker. El entorno npm 10.9.8
+falló al resolver ese parche (`edgesOut`); el lockfile se resolvió con npm 11
+usado temporalmente, sin cambiar la instalación global de npm.

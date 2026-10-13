@@ -1,5 +1,6 @@
 package com.moonblogger.app.network
 
+import com.moonblogger.app.data.auth.RefreshResult
 import com.moonblogger.app.data.auth.AuthRefresher
 import com.moonblogger.app.data.auth.SessionManager
 import com.moonblogger.app.data.token.TokenStore
@@ -17,11 +18,11 @@ import okhttp3.Route
  *     simultáneos, solo se lanza un refresh.
  *  2. Persiste el refresh ROTADO que devuelve el backend.
  *  3. Reintenta la petición original UNA vez con el nuevo access.
- *  4. Si el refresh falla → logout local (borrar tokens) y no reintenta.
+ *  4. Un refresh rechazado invalida la sesión; fallos de conexión permiten reintentar luego.
  *
  * Protecciones anti-bucle:
  *  - Las rutas de auth (login/refresh) no se reintentan: si /auth/refresh/
- *    responde 401 (refresh inválido), se hace logout y se devuelve null.
+ *    responde 401, se devuelve null. AuthRefresher coordina la invalidación.
  *  - La petición reintentada lleva un header de marcado; si vuelve a dar 401,
  *    se devuelve null (un solo reintento).
  */
@@ -39,7 +40,6 @@ class TokenAuthenticator(
         // El refresh devolvió 401 (refresh inválido/caducado): la sesión no se
         // puede renovar. Logout local y stop (evita reintentar el refresh).
         if (path.endsWith("/auth/refresh/")) {
-            sessionManager.logout()
             return null
         }
 
@@ -54,11 +54,18 @@ class TokenAuthenticator(
             return null
         }
 
+        // Another request may already have renewed the access token while this 401 travelled.
+        val currentAccess = tokenStore.accessToken
+        if (currentAccess != null && response.request.header("Authorization") != "Bearer $currentAccess") {
+            return response.request.newBuilder().header("Authorization", "Bearer $currentAccess")
+                .header(RETRY_HEADER, "1").build()
+        }
+
         // El refresh se ejecuta en el hilo de OkHttp; single-flight hace que
         // los 401 concurrentes compartan la misma llamada de refresh.
         val refreshed = runBlocking { authRefresher.refreshAccessToken() }
-        if (!refreshed) {
-            sessionManager.logout()
+        if (refreshed != RefreshResult.SUCCESS) {
+            if (refreshed == RefreshResult.INVALID) sessionManager.synchronizeInvalidation()
             return null
         }
 

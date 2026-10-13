@@ -181,4 +181,18 @@ class TokenAuthenticatorTest {
         assertEquals(1, refreshHits) // un solo refresh, sin bucle infinito
         assertEquals(2, recordedRequests.count { it.url.encodedPath == "/api/v1/posts/" })
     }
+    @Test
+    fun `refresh service outage keeps session and tokens for retry`() {
+        tokenStore.saveTokens("expired", "still-valid-refresh")
+        sessionManager.onLoginSuccess("expired", "still-valid-refresh")
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) = if (request.url.encodedPath.endsWith("/auth/refresh/"))
+                jsonResponse(503, "{}") else jsonResponse(401, "{}")
+        }
+        get("api/v1/posts/").use { assertEquals(401, it.code) }
+        assertEquals(SessionState.LoggedIn, sessionManager.state.value)
+        assertEquals("still-valid-refresh", tokenStore.refreshToken)
+        assertEquals(2, server.requestCount)
+    }
+
 }

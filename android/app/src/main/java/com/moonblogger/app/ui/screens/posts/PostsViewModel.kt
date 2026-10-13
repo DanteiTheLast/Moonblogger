@@ -15,69 +15,44 @@ import kotlinx.coroutines.Job
 data class PostsUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val hasMore: Boolean = false,
     val posts: List<Post> = emptyList(),
     val error: String? = null,
 )
 
-/** Lista de posts (incluye borradores) con pull-to-refresh. */
-class PostsViewModel(
-    private val repository: PostRepository,
-) : ViewModel() {
-
+/** Lista privada paginada. Los fallos al cargar más conservan la página y permiten reintentar. */
+class PostsViewModel(private val repository: PostRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(PostsUiState())
     val uiState: StateFlow<PostsUiState> = _uiState.asStateFlow()
-
     private var hasLoaded = false
     private var activeRequest: Job? = null
+    private var nextPage = 2
 
-    /** Invocado al volver a estar visible: carga inicial o refresh silencioso. */
-    fun onScreenResumed() {
-        if (activeRequest?.isActive == true) return
-        val initial = !hasLoaded
-        activeRequest = viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = initial,
-                    isRefreshing = !initial,
-                    error = null,
-                )
-            }
-            repository.listPosts()
-                .onSuccess { posts ->
-                    hasLoaded = true
-                    _uiState.update {
-                        it.copy(isLoading = false, isRefreshing = false, posts = posts)
-                    }
-                }
-                .onFailure { e ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRefreshing = false,
-                            error = ApiErrors.userMessage(e),
-                        )
-                    }
-                }
-        }.also { job ->
-            job.invokeOnCompletion { if (activeRequest === job) activeRequest = null }
-        }
+    fun onScreenResumed() = load(append = false, initial = !hasLoaded)
+    fun refresh() = load(append = false, initial = false)
+    fun loadMore() {
+        if (_uiState.value.hasMore) load(append = true, initial = false)
     }
 
-    fun refresh() {
+    private fun load(append: Boolean, initial: Boolean) {
         if (activeRequest?.isActive == true) return
         activeRequest = viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true, error = null) }
-            repository.listPosts()
-                .onSuccess { posts ->
-                    _uiState.update { it.copy(isRefreshing = false, posts = posts) }
+            _uiState.update { it.copy(isLoading = initial, isRefreshing = !append && !initial,
+                isLoadingMore = append, error = null) }
+            val page = if (append) nextPage else 1
+            repository.listPostPage(page)
+                .onSuccess { response ->
+                    hasLoaded = true
+                    nextPage = page + 1
+                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, isLoadingMore = false,
+                        hasMore = response.next != null,
+                        posts = (if (append) it.posts + response.results else response.results).distinctBy { post -> post.id }) }
                 }
-                .onFailure { e ->
-                    _uiState.update {
-                        it.copy(isRefreshing = false, error = ApiErrors.userMessage(e))
-                    }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, isLoadingMore = false,
+                        error = ApiErrors.userMessage(error)) }
                 }
-        }.also { job ->
-            job.invokeOnCompletion { if (activeRequest === job) activeRequest = null }
-        }
+        }.also { job -> job.invokeOnCompletion { if (activeRequest === job) activeRequest = null } }
     }
 }

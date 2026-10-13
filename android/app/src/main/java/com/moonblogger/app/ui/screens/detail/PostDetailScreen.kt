@@ -141,6 +141,7 @@ fun PostDetailScreen(
                         .padding(horizontal = 20.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     StatusChip(status = post.status)
                     Text(
                         text = post.title,

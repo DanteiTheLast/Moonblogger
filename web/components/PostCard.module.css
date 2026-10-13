@@ -89,6 +89,7 @@
 
 .title {
   font-size: 1.4rem;
+  overflow-wrap: anywhere;
 }
 
 .date {

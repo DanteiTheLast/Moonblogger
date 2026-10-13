@@ -1,0 +1,102 @@
+name: Verify application
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: moonblogger
+          POSTGRES_USER: moonblogger
+          POSTGRES_PASSWORD: test-secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U moonblogger -d moonblogger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: ci-only-test-secret-not-for-production
+      DJANGO_DEBUG: "true"
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: moonblogger
+      DB_USER: moonblogger
+      DB_PASSWORD: test-secret
+      DB_SSLMODE: disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python manage.py makemigrations --check --dry-run
+      - run: python manage.py test posts
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm test --prefix web
+      - run: npm run lint --prefix web
+      - run: npm audit --omit=dev --prefix web
+      - name: Build against isolated public API
+        env:
+          API_BASE_URL: http://127.0.0.1:8767/api/v1
+          SITE_URL: https://moonblogger.example
+        run: |
+          python3 .github/scripts/mock_public_api.py &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          npm run build --prefix web
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle.kts
+            android/gradle/libs.versions.toml
+            android/gradle/wrapper/gradle-wrapper.properties
+      - name: Ensure compile SDK is available
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
+

@@ -11,15 +11,15 @@ import com.moonblogger.app.data.remote.safeApiCall
 /**
  * Acceso a los posts privados (autenticado).
  *
- * NOTA DE PAGINACIÓN (v1): el endpoint devuelve una lista paginada de DRF
- * (`{count, next, previous, results}`, page_size 20). En esta versión solo se
- * consume la primera página. La gestión de `next`/carga infinita queda como
- * trabajo futuro documentado en `android/README.md`.
+ * Paginación DRF por número de página; los enlaces next nunca reciben tokens directamente.
  */
 class PostRepository(private val postsApi: PostsApi) {
 
     suspend fun listPosts(): Result<List<Post>> =
         safeApiCall { postsApi.listPosts(status = null).results }
+
+    suspend fun listPostPage(page: Int = 1): Result<com.moonblogger.app.data.model.PostPage> =
+        safeApiCall { postsApi.listPosts(status = null, page = page) }
 
     suspend fun getPost(id: Long): Result<Post> =
         safeApiCall { postsApi.getPost(id) }
@@ -43,6 +43,11 @@ class PostRepository(private val postsApi: PostsApi) {
         transition: CarouselTransition = CarouselTransition.SLIDE,
     ): Result<Post> =
         safeApiCall { postsApi.updatePost(id, PostRequest(title, content, status, transition)) }
+
+    /** Metadata preparation must not change publication state, including after a lost response. */
+    suspend fun updatePostContent(
+        id: Long, title: String, content: String, transition: CarouselTransition,
+    ): Result<Post> = safeApiCall { postsApi.updatePost(id, PostRequest(title, content, carousel_transition = transition)) }
 
     suspend fun deletePost(id: Long): Result<Unit> =
         safeApiCall { postsApi.deletePost(id) }
