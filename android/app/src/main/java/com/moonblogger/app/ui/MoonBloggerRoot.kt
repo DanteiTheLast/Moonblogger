@@ -22,7 +22,7 @@ import com.moonblogger.app.data.auth.SessionState
 import com.moonblogger.app.di.AppContainer
 import com.moonblogger.app.ui.navigation.AuthNavHost
 import com.moonblogger.app.ui.navigation.MainNavHost
-import com.moonblogger.app.ui.components.DecorativeMotif
+import com.moonblogger.app.ui.components.KotoSize
 import com.moonblogger.app.ui.components.KotoSprite
 
 /**
@@ -63,7 +63,7 @@ private fun LoadingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            KotoSprite()
+            KotoSprite(size = KotoSize.Large)
             Text(
                 text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineMedium,

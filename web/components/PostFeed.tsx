@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { getPublishedPostsPage } from "@/lib/api";
 import PostCard from "@/components/PostCard";
-import PixelScene from "@/components/PixelScene";
+import BrandArtwork from "@/components/BrandArtwork";
 import RouteState from "@/components/RouteState";
 import styles from "@/app/page.module.css";
 
@@ -27,7 +27,7 @@ export default async function PostFeed({ page }: { page: number }) {
             Hola, soy Moon. Aquí guardo mis publicaciones.
           </p>
         </div>
-        <PixelScene className={styles.heroScene} variant="hero" />
+        <BrandArtwork className={styles.heroScene} />
       </section>
 
       {posts.length === 0 ? (

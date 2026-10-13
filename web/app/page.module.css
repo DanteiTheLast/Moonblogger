@@ -30,8 +30,13 @@
 }
 
 .heroScene {
-  flex: 0 1 22rem;
+  flex: 0 1 auto;
   width: 100%;
+  max-width: 22rem;
+  align-self: center;
+  border: var(--border-solid);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-hard-offset-sm);
 }
 
 .feed {

@@ -1,6 +1,8 @@
 package com.moonblogger.app.di
 
 import android.content.Context
+import android.os.Build
+import coil3.gif.AnimatedImageDecoder
 import com.moonblogger.app.BuildConfig
 import com.moonblogger.app.data.auth.AuthRefresher
 import com.moonblogger.app.data.auth.SessionManager
@@ -60,7 +62,12 @@ class AppContainer(context: Context) {
 
     /** Loader for signed storage URLs; deliberately uses the public client. */
     val imageLoader: ImageLoader = ImageLoader.Builder(appContext)
-        .components { add(OkHttpNetworkFetcherFactory(callFactory = { baseOkHttpClient })) }
+        .components {
+            add(OkHttpNetworkFetcherFactory(callFactory = { baseOkHttpClient }))
+            // Animated WebP uses the platform decoder on API 28+. API 26–27
+            // Koto uses bundled frames rather than the GIF-only legacy decoder.
+            if (Build.VERSION.SDK_INT >= 28) add(AnimatedImageDecoder.Factory())
+        }
         .build()
 
     private val authRetrofit: Retrofit = Retrofit.Builder()

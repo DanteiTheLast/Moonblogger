@@ -2,6 +2,7 @@ package com.moonblogger.app.ui.screens.login
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,85 +32,86 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moonblogger.app.R
-import com.moonblogger.app.ui.components.DecorativeMotif
 import com.moonblogger.app.ui.components.KotoSprite
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        KotoSprite()
-        Text(
-            text = stringResource(R.string.login_title),
-            style = MaterialTheme.typography.displaySmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.login_subtitle),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = state.username,
-            onValueChange = viewModel::onUsernameChange,
-            label = { Text(stringResource(R.string.login_username)) },
-            singleLine = true,
-            enabled = !state.isLoading,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = state.password,
-            onValueChange = viewModel::onPasswordChange,
-            label = { Text(stringResource(R.string.login_password)) },
-            singleLine = true,
-            enabled = !state.isLoading,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { viewModel.login() }),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        AnimatedVisibility(visible = state.error != null, enter = fadeIn(), exit = fadeOut()) {
-            val error = state.error ?: return@AnimatedVisibility
-            Spacer(Modifier.height(12.dp))
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        val artworkSize = (maxHeight * 0.22f).coerceIn(72.dp, 160.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            KotoSprite(sizeDp = artworkSize)
             Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
+                text = stringResource(R.string.login_title),
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.login_subtitle),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(32.dp))
+
+            OutlinedTextField(
+                value = state.username,
+                onValueChange = viewModel::onUsernameChange,
+                label = { Text(stringResource(R.string.login_username)) },
+                singleLine = true,
+                enabled = !state.isLoading,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
+            Spacer(Modifier.height(12.dp))
 
-        Spacer(Modifier.height(24.dp))
+            OutlinedTextField(
+                value = state.password,
+                onValueChange = viewModel::onPasswordChange,
+                label = { Text(stringResource(R.string.login_password)) },
+                singleLine = true,
+                enabled = !state.isLoading,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.login() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        Button(
-            onClick = viewModel::login,
-            enabled = state.canSubmit,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            if (state.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
+            AnimatedVisibility(visible = state.error != null, enter = fadeIn(), exit = fadeOut()) {
+                val error = state.error ?: return@AnimatedVisibility
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            } else {
-                Text(stringResource(R.string.login_button))
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Button(
+                onClick = viewModel::login,
+                enabled = state.canSubmit,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(stringResource(R.string.login_button))
+                }
             }
         }
     }

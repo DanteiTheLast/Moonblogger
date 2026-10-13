@@ -20,6 +20,13 @@ const pixelifySans = Pixelify_Sans({
 export const metadata: Metadata = {
   title: "MoonBlogger",
   description: "El blog público de Moon: sus publicaciones, en orden.",
+  icons: {
+    icon: [
+      { url: "/brand/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

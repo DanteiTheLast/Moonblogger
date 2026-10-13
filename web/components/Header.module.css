@@ -25,34 +25,6 @@
   box-shadow: var(--shadow-hard-offset-sm);
 }
 
-.trailMarker::before {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  width: var(--space-2);
-  height: var(--space-2);
-  background: var(--action);
-  box-shadow: calc(0px - var(--space-1)) var(--space-1) 0 var(--action);
-  content: "";
-}
-
-.trailMarker::after {
-  position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
-  width: var(--space-2);
-  height: var(--space-2);
-  background: var(--ink-secondary);
-  box-shadow:
-    calc(0px - var(--space-1)) var(--space-1) 0 var(--ink-secondary),
-    calc(0px - var(--space-2)) var(--space-2) 0 var(--ink-secondary),
-    calc(0px - var(--space-3)) var(--space-3) 0 var(--ink-secondary),
-    calc(0px - var(--space-4)) var(--space-4) 0 var(--ink-secondary),
-    calc(0px - var(--space-4) - var(--space-1)) var(--space-4) 0 var(--ink-secondary),
-    calc(0px - var(--space-5)) var(--space-4) 0 var(--ink-secondary);
-  content: "";
-}
-
 .brand {
   font-family: var(--font-display);
   font-size: 1.5rem;

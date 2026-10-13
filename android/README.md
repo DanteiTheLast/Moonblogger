@@ -151,3 +151,11 @@ El editor acepta JPEG, PNG y WebP estáticos de hasta 32 MiB como entrada. Antes
 La API sigue recibiendo un máximo de 8 MiB por imagen: si una salida PNG con transparencia supera ese límite, se rechaza con un mensaje visible; no se aplana ni se sube el original. Tampoco se convierten animaciones a una primera imagen. Los bytes y dimensiones del intento de subida corresponden al archivo final optimizado.
 
 Las pruebas `PhotoOptimizerTest` usan gráficos nativos de Robolectric para ejercitar los codecs Android, orientación, transparencia y limpieza de temporales. No sustituyen la comprobación de rendimiento y memoria en teléfonos reales.
+
+### Identidad visual (0.1.7)
+
+El launcher usa el PNG proporcionado, con margen dentro del icono adaptativo para conservar el gato y la luna bajo distintas máscaras. El login adapta el gráfico al alto disponible (72–160 dp), incluido el teclado; la pantalla Compose de inicialización usa 128 dp. No se añade espera artificial al arranque.
+
+Koto reproduce el WebP original en Android 9/API 28 o superior mediante `coil-gif` 3.3.0 y `AnimatedImageDecoder`. Android 8/API 26–27 usa seis fotogramas extraídos sin alterar sus píxeles ni sus intervalos (ciclo de 2,3 segundos), con el temporizador suspendido cuando la pantalla deja de estar visible. Al desactivar las animaciones del sistema se muestra el PNG estático, también si la preferencia cambia con la aplicación abierta.
+
+El splash del sistema en Android 12+ muestra el PNG: esa ventana admite animaciones vectoriales, no WebP animado. La pantalla de carga Compose posterior sí puede reproducir el WebP mientras se inicializa la sesión. Las pruebas de recursos comprueban decodificación en API 26 y 35 y que el decodificador nativo reconoce el WebP como `AnimatedImageDrawable`; la apariencia y fluidez finales deben comprobarse en dispositivo.

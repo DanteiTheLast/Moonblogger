@@ -237,3 +237,12 @@ exacto. No se añade un procesador de imágenes en Django ni otro servicio; se
 conserva el contrato existente. La caché del optimizador puede retener copias
 públicas después de retirar contenido y consume cuota del proveedor existente.
 Las imágenes almacenadas no se migran ni se eliminan.
+
+## D16 — Gato y luna aportados por el propietario (13/10/2026)
+
+PNG para iconos y WebP original para los adornos de marca web y las pantallas de
+login/inicialización Android. Se conservan marcos, sombras y composición. La
+animación no usa el optimizador de fotos; las preferencias de movimiento
+seleccionan una versión estática. Android26–27 conserva los seis fotogramas y
+sus tiempos mediante fallback. El splash nativo de Android31 permanece estático
+con el nuevo icono y se continúa con Compose sin retrasar sesión. Ver branding.md.
