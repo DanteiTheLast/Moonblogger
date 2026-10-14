@@ -11,7 +11,7 @@ from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Post, PostMedia, PublicVisit, PublicVisitEvent
+from .models import Post, PostMedia, Tag, PublicVisit, PublicVisitEvent
 from .analytics import cleanup_expired_visits, sanitize_user_agent, valid_public_path, verified_visitor_ip, utc_now
 
 class PublicVisitView(APIView):
@@ -71,6 +71,7 @@ from .serializers import (
     PublicPostListSerializer,
     PublicPostSerializer,
     UploadIntentSerializer,
+    TagSerializer,
 )
 from .services import (
     PromotionFailed,
@@ -121,7 +122,7 @@ class PostViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author").prefetch_related("media").filter(author=self.request.user)
+        queryset = Post.objects.select_related("author").prefetch_related("media", "tags").filter(author=self.request.user)
         status_filter = self.request.query_params.get("status")
         if status_filter in Post.Status.values:
             queryset = queryset.filter(status=status_filter)
@@ -133,11 +134,13 @@ class PostViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        requested_tags = serializer.validated_data.pop("tag_slugs", [])
         requested_status = serializer.validated_data.pop("status", Post.Status.DRAFT)
         try:
             with transaction.atomic():
                 post = Post(author=request.user, status=Post.Status.DRAFT, **serializer.validated_data)
                 post.save()
+                post.tags.set(serializer.validate_tag_slugs([tag.slug for tag in requested_tags]))
                 if requested_status == Post.Status.PUBLISHED:
                     publish_post(post)
         except PromotionFailed as exc:
@@ -153,12 +156,16 @@ class PostViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        requested_tags = serializer.validated_data.pop("tag_slugs", None)
         requested_status = serializer.validated_data.pop("status", None)
         try:
             with transaction.atomic():
                 instance = Post.objects.select_for_update().get(pk=instance.pk, author=request.user)
                 if requested_status is None:
                     requested_status = instance.status
+                if requested_tags is not None:
+                    serializer.instance = instance
+                    instance.tags.set(serializer.validate_tag_slugs([tag.slug for tag in requested_tags]))
                 for attribute, value in serializer.validated_data.items():
                     setattr(instance, attribute, value)
                 if requested_status == Post.Status.PUBLISHED and instance.status != Post.Status.PUBLISHED:
@@ -186,8 +193,16 @@ class PublicPostViewSet(viewsets.ReadOnlyModelViewSet):
         media = PostMedia.objects.filter(
             state=PostMedia.State.READY, position__isnull=False
         ).order_by("position")
-        return Post.objects.filter(status=Post.Status.PUBLISHED).prefetch_related(
-            Prefetch("media", queryset=media)
+        queryset = Post.objects.filter(status=Post.Status.PUBLISHED)
+        if self.action == "list":
+            slugs = list(dict.fromkeys(self.request.query_params.getlist("tag")))
+            if slugs:
+                known = set(Tag.objects.filter(slug__in=slugs).values_list("slug", flat=True))
+                if len(slugs) > 50 or set(slugs) != known:
+                    raise ValidationError({"tag": "Hay etiquetas desconocidas."})
+                queryset = queryset.filter(tags__slug__in=slugs).distinct()
+        return queryset.prefetch_related(
+            Prefetch("media", queryset=media), "tags"
         ).order_by("-published_at", "-id")
 
     def get_serializer_context(self):
@@ -195,6 +210,22 @@ class PublicPostViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_serializer_class(self):
         return PublicPostListSerializer if self.action == "list" else PublicPostSerializer
+
+
+class TagCatalogView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(TagSerializer(Tag.objects.filter(is_active=True), many=True).data)
+
+
+class PublicTagCatalogView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        tags = Tag.objects.filter(posts__status=Post.Status.PUBLISHED).distinct()
+        return Response(TagSerializer(tags, many=True).data)
 
 
 class PostMediaBaseView(APIView):

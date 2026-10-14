@@ -6,9 +6,9 @@ import urllib.request
 
 from django.db import transaction
 from django.dispatch import receiver
-from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
+from django.db.models.signals import post_delete, post_save, pre_delete, pre_save, m2m_changed
 
-from .models import Post, PostMedia
+from .models import Post, PostMedia, Tag
 from .services import enqueue_media_deletions
 
 
@@ -122,3 +122,45 @@ def _on_post_delete(sender, instance, **kwargs):
 def _queue_deleted_media_objects(sender, instance, **kwargs):
     """Persist cleanup work in the same DB transaction as the deletion."""
     enqueue_media_deletions(instance)
+
+
+@receiver(m2m_changed, sender=Post.tags.through)
+def _on_post_tags_changed(sender, instance, action, reverse, pk_set, **kwargs):
+    # Reverse clear needs the affected posts captured before the relation disappears.
+    if reverse and action == "pre_clear":
+        instance._cleared_public_tags = instance.posts.filter(status=Post.Status.PUBLISHED).exists()
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+    if reverse:
+        public = (getattr(instance, "_cleared_public_tags", False) if action == "post_clear"
+                  else Post.objects.filter(pk__in=pk_set, status=Post.Status.PUBLISHED).exists())
+    else:
+        public = instance.status == Post.Status.PUBLISHED
+    if public:
+        transaction.on_commit(lambda: _send_webhook(Post.Status.PUBLISHED, Post.Status.PUBLISHED))
+
+
+@receiver(pre_save, sender=Tag)
+def _capture_public_tag_change(sender, instance, **kwargs):
+    instance._public_tag_changed = False
+    if instance.pk:
+        previous = Tag.objects.filter(pk=instance.pk).values("name", "sort_order", "is_active").first()
+        instance._public_tag_changed = bool(previous and any(previous[key] != getattr(instance, key) for key in previous)
+                                            and instance.posts.filter(status=Post.Status.PUBLISHED).exists())
+
+
+@receiver(post_save, sender=Tag)
+def _invalidate_public_tag_change(sender, instance, **kwargs):
+    if getattr(instance, "_public_tag_changed", False):
+        transaction.on_commit(lambda: _send_webhook(Post.Status.PUBLISHED, Post.Status.PUBLISHED))
+
+
+@receiver(pre_delete, sender=Tag)
+def _capture_public_tag_deletion(sender, instance, **kwargs):
+    instance._was_public = instance.posts.filter(status=Post.Status.PUBLISHED).exists()
+
+
+@receiver(post_delete, sender=Tag)
+def _invalidate_public_tag_deletion(sender, instance, **kwargs):
+    if getattr(instance, "_was_public", False):
+        transaction.on_commit(lambda: _send_webhook(Post.Status.PUBLISHED, Post.Status.PUBLISHED))

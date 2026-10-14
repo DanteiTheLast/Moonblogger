@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from django.conf import settings
 
-from .models import Post, PostMedia
+from .models import Post, PostMedia, Tag
 
 
 def _public_url(object_key):
@@ -46,7 +46,29 @@ class PublicPostMediaSerializer(serializers.ModelSerializer):
         return _public_url(obj.public_poster_key)
 
 
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ["slug", "name"]
+
+
 class PostSerializer(serializers.ModelSerializer):
+    tags = TagSerializer(many=True, read_only=True)
+    tag_slugs = serializers.ListField(
+        child=serializers.SlugField(max_length=50), required=False, write_only=True,
+        allow_empty=True, max_length=50,
+    )
+
+    def validate_tag_slugs(self, values):
+        slugs = list(dict.fromkeys(values))
+        if len(slugs) > 5:
+            raise serializers.ValidationError("Selecciona como máximo cinco etiquetas.")
+        existing = set(self.instance.tags.values_list("slug", flat=True)) if self.instance else set()
+        tags = list(Tag.objects.filter(slug__in=slugs))
+        if len(tags) != len(slugs) or any(not tag.is_active and tag.slug not in existing for tag in tags):
+            raise serializers.ValidationError("Hay etiquetas desconocidas o retiradas del catálogo.")
+        return tags
+
     media = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = Post
@@ -61,6 +83,8 @@ class PostSerializer(serializers.ModelSerializer):
             "published_at",
             "carousel_transition",
             "media",
+            "tags",
+            "tag_slugs",
         ]
         read_only_fields = [
             "id",
@@ -85,6 +109,7 @@ class PostSerializer(serializers.ModelSerializer):
 
 
 class PublicPostSerializer(serializers.ModelSerializer):
+    tags = TagSerializer(many=True, read_only=True)
     media_count = serializers.SerializerMethodField()
     cover = serializers.SerializerMethodField()
     media = serializers.SerializerMethodField()
@@ -93,7 +118,7 @@ class PublicPostSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             "id", "slug", "title", "content", "status", "created_at", "updated_at", "published_at",
-            "carousel_transition", "cover", "media_count", "media",
+            "carousel_transition", "cover", "media_count", "media", "tags",
         ]
 
     def _media(self, obj):

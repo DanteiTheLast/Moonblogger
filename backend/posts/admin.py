@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Post, PostMedia, StorageDeletionTask, PublicVisit
+from .models import Post, PostMedia, StorageDeletionTask, PublicVisit, Tag
 
 @admin.register(PublicVisit)
 class PublicVisitAdmin(admin.ModelAdmin):
@@ -45,4 +45,14 @@ class StorageDeletionTaskAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request): return False
     def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "sort_order", "is_active")
+    list_filter = ("is_active",)
+    readonly_fields = ("slug",)
+
+    def has_add_permission(self, request): return False
     def has_delete_permission(self, request, obj=None): return False

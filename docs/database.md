@@ -139,3 +139,13 @@ usuario. El volcado está en formato custom de PostgreSQL y se restaura con
 `PublicVisit` agrupa visitas por path, IP y fecha UTC. La restricción única evita
 duplicados y `hit_count` se incrementa atómicamente. Los registros se retienen
 30 días por defecto y se limpian con `cleanup_public_visits`.
+
+## Catálogo de etiquetas
+
+Migraciones `0005_tag_post_tags` y `0006_seed_tags` crean `posts_tag` (slug único estable, nombre, orden, activo) y `posts_post_tags` (relación M2M, unicidad Post/Tag, índices/FK generados por Django). No añaden asociaciones a publicaciones existentes.
+
+Catálogo inicial: Diario/diario, Ideas/ideas, Relatos/relatos, Comida/comida, Estudio/estudio, Viajes/viajes, Fotografía/fotografia, Mascotas/mascotas, Dan/dan. La reversión del seed es noop para no borrar asociaciones de usuario; revertir la migración estructural elimina las tablas nuevas y debe tratarse como destructivo.
+
+La API permite cinco etiquetas únicas como máximo; no hay SQL directo desde clientes. Retirar del catálogo usa `is_active=False`, conserva asociaciones históricas; admin permite nombre, orden y activo, no crear/eliminar etiquetas ni editar slug en esta versión.
+
+Después de migrar en PostgreSQL, ejecutar `secure_data_api --apply --plan-file <archivo privado nuevo fuera de Git>` y verificar permisos. El comando descubre modelos con `include_auto_created=True`: cubre tanto `posts_tag` como `posts_post_tags` y sus secuencias dependientes automáticamente. No cambia ACL globales ni accede a datos de publicaciones. No desplegar clientes antes de completar migración y revisión de ACL.

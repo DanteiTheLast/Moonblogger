@@ -10,6 +10,19 @@ from django.core.validators import validate_ipv46_address
 User = get_user_model()
 
 
+class Tag(models.Model):
+    slug = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=50)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order", "name", "slug"]
+
+    def __str__(self):
+        return self.name
+
+
 class Post(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Borrador"
@@ -23,6 +36,7 @@ class Post(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True)
     content = models.TextField()
+    tags = models.ManyToManyField(Tag, related_name="posts", blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

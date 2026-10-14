@@ -13,6 +13,8 @@ from .views import (
     PublicPostViewSet,
     UploadIntentView,
     PublicVisitView,
+    TagCatalogView,
+    PublicTagCatalogView,
 )
 
 router = DefaultRouter()
@@ -20,6 +22,8 @@ router.register("posts", PostViewSet, basename="post")
 router.register("public/posts", PublicPostViewSet, basename="public-post")
 
 urlpatterns = [
+    path("tags/", TagCatalogView.as_view(), name="tags"),
+    path("public/tags/", PublicTagCatalogView.as_view(), name="public-tags"),
     path("health/", HealthCheckView.as_view(), name="health"),
     path("ready/", ReadinessCheckView.as_view(), name="ready"),
     path("internal/public-visits/", PublicVisitView.as_view(), name="public-visits"),

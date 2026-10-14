@@ -168,3 +168,13 @@ claves se mantienen internas: no forman parte de la API de MoonBlogger.
 solo se acepta dentro de `VISIT_FORWARDING_MAX_AGE_SECONDS`. La repetición del
 mismo `event_id` es idempotente y no incrementa el contador. Devuelve 204; los
 errores no revelan si existe un post, una IP, una firma o un secreto.
+
+## Etiquetas (contrato aditivo)
+
+- `GET /api/v1/tags/`: JWT obligatorio; catálogo activo ordenado, array de `{slug, name}`.
+- `GET /api/v1/public/tags/`: array de etiquetas asociadas a alguna publicación pública; nunca incluye etiquetas usadas sólo en borradores. Incluye etiquetas retiradas aún presentes públicamente, para conservar lectura histórica.
+- Todos los serializers de publicaciones incluyen `tags: [{slug, name}]`, ordenados por catálogo. `#` sólo pertenece a presentación.
+- POST/PUT/PATCH privados aceptan `tag_slugs: ["viajes", "dan"]`: opcional, máximo cinco etiquetas únicas, duplicados normalizados. Slugs desconocidos o etiquetas inactivas nuevas dan 400. Una etiqueta inactiva ya asociada puede conservarse. Omitir el campo conserva asociaciones en edición, incluso con clientes anteriores; `[]` las elimina. Creación sin campo empieza sin etiquetas.
+- `GET /api/v1/public/posts/?tag=viajes&tag=dan&page=2`: OR antes de paginar, sin duplicados, orden cronológico existente. Slugs desconocidos dan 400. El parámetro repetido sólo afecta al listado; el detalle conserva su ruta actual.
+
+Actualización y relación M2M comparten transacción y bloqueo de Post. Cambios M2M públicos, renombrado/orden/activación de etiquetas públicas y eliminación invalidan web mediante webhook después del commit; un rollback no invalida. Los clientes deben invalidar listado y catálogo público con el mismo webhook. Las rutas web de filtros siguen siendo la página principal.
