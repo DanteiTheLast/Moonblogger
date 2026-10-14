@@ -24,7 +24,7 @@ export default async function PostFeed({ page }: { page: number }) {
         <div className={styles.heroContent}>
           <HeroHeading className={styles.heroTitle}>MoonBlogger</HeroHeading>
           <p className={styles.heroText}>
-            Hola, soy Moon. Aquí guardo mis publicaciones.
+            “¿Qué imagen haces de ti misma con los pedazos que recoges de tu sombra?”
           </p>
         </div>
         <BrandArtwork className={styles.heroScene} />
