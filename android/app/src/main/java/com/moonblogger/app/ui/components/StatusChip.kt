@@ -28,7 +28,7 @@ fun StatusChip(
         PostStatus.PUBLISHED -> stringResource(R.string.status_published)
     }
     val containerColor = when (status) {
-        PostStatus.DRAFT -> MoonLavender
+        PostStatus.DRAFT -> MaterialTheme.colorScheme.secondaryContainer
         PostStatus.PUBLISHED -> MaterialTheme.colorScheme.primaryContainer
     }
 
@@ -36,7 +36,7 @@ fun StatusChip(
         modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small),
         shape = MaterialTheme.shapes.small,
         color = containerColor,
-        contentColor = MoonText,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Text(
             text = label,

@@ -4,16 +4,17 @@
 
 .card {
   height: 100%;
+  position: relative;
 }
 
 .cardLink {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
   background: var(--panel);
   border: var(--border-solid);
   box-shadow: var(--shadow-hard-offset-md);
-  padding: var(--space-4);
+  padding: 0;
   height: 100%;
   color: var(--ink-primary);
   text-decoration: none;
@@ -33,7 +34,7 @@
   aspect-ratio: 16 / 9;
   max-height: 18rem;
   overflow: hidden;
-  border: var(--border-solid);
+  border-bottom: var(--border-width) solid var(--border);
   background: var(--surface-soft);
 }
 
@@ -86,6 +87,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  flex: 1;
+  padding: var(--space-5);
 }
 
 .title {
@@ -110,19 +113,24 @@
   align-items: center;
   min-height: 44px;
   padding: var(--space-2) var(--space-3);
-  border: var(--border-solid);
-  background: var(--action);
-  box-shadow: var(--shadow-hard-offset-sm);
-  color: var(--action-on);
+  margin-top: auto;
+  border-bottom: var(--border-width) solid var(--action);
+  color: var(--action);
   font-weight: 700;
   transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
 }
 
 .cardLink:hover .cta {
-  background: var(--action-hover);
+  color: var(--action-hover);
+  border-bottom-color: var(--action-hover);
 }
 
 .cardLink:active .cta {
   transform: translate(var(--pixel-unit), var(--pixel-unit));
   box-shadow: none;
 }
+
+.titleLink { color: inherit; text-decoration: none; }
+.titleLink::after { content: ""; position: absolute; inset: 0; }
+.titleLink:focus-visible::after { outline: 3px solid var(--focus); outline-offset: 4px; }
+.readLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

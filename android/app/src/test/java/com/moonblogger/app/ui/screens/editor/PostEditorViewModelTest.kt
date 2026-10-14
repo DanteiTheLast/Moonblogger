@@ -54,6 +54,35 @@ class PostEditorViewModelTest {
     private fun vm(id: Long? = null, store: EditorDraftStore? = null) =
         PostEditorViewModel(repository, mediaRepository, photos, id, store)
 
+    @Test fun `selected tags survive draft recovery and cap at five`() = runBlocking {
+        server.enqueue(jsonResponse(200, """[{"slug":"diario","name":"Diario"},{"slug":"ideas","name":"Ideas"},{"slug":"relatos","name":"Relatos"},{"slug":"viajes","name":"Viajes"},{"slug":"dan","name":"Dan"},{"slug":"mascotas","name":"Mascotas"}]"""))
+        val store = MemoryDraft()
+        val editor = vm(store = store)
+        editor.loadTags()
+        withTimeout(5000) { editor.uiState.first { !it.tagsLoading && it.tagCatalog.isNotEmpty() } }
+        listOf("diario", "ideas", "relatos", "viajes", "dan", "mascotas").forEach(editor::toggleTag)
+        assertEquals(5, editor.uiState.value.tags.size)
+        val recovered = vm(store = store)
+        assertEquals(editor.uiState.value.tags, recovered.uiState.value.tags)
+        assertTrue(recovered.uiState.value.tagsDirty)
+    }
+
+    @Test fun `catalog failure preserves existing tags and unchanged save omits field`() = runBlocking {
+        val store = MemoryDraft().apply { value = EditorDraft(1, PostStatus.DRAFT, "Text", "Content", PostStatus.DRAFT,
+            CarouselTransition.SLIDE, emptyList(), emptySet(), false, false, tags = listOf(Tag("dan", "Dan"))) }
+        server.enqueue(jsonResponse(500, "{}"))
+        val editor = vm(store = store)
+        editor.loadTags()
+        withTimeout(5000) { editor.uiState.first { it.tagsError != null } }
+        assertEquals(listOf(Tag("dan", "Dan")), editor.uiState.value.tags)
+        assertFalse(editor.uiState.value.tagsDirty)
+        server.takeRequest()
+        server.enqueue(jsonResponse(200, SAMPLE_POST_JSON))
+        editor.onContentChange("Edited")
+        editor.save(); settled(editor)
+        assertFalse(server.takeRequest().body!!.utf8().contains("tag_slugs"))
+    }
+
     @Test fun `initial load failure cannot overwrite original and retry loads it`() = runBlocking {
         server.enqueue(jsonResponse(500, "{}"))
         val editor = vm(1)

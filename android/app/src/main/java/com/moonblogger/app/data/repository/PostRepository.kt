@@ -15,6 +15,8 @@ import com.moonblogger.app.data.remote.safeApiCall
  */
 class PostRepository(private val postsApi: PostsApi) {
 
+    suspend fun listTags(): Result<List<com.moonblogger.app.data.model.Tag>> = safeApiCall { postsApi.listTags() }
+
     suspend fun listPosts(): Result<List<Post>> =
         safeApiCall { postsApi.listPosts(status = null).results }
 
@@ -32,8 +34,9 @@ class PostRepository(private val postsApi: PostsApi) {
         content: String,
         status: PostStatus,
         transition: CarouselTransition = CarouselTransition.SLIDE,
+        tagSlugs: List<String>? = null,
     ): Result<Post> =
-        safeApiCall { postsApi.createPost(PostRequest(title, content, status, transition)) }
+        safeApiCall { postsApi.createPost(PostRequest(title, content, status, transition, tagSlugs)) }
 
     suspend fun updatePost(
         id: Long,
@@ -41,13 +44,14 @@ class PostRepository(private val postsApi: PostsApi) {
         content: String,
         status: PostStatus,
         transition: CarouselTransition = CarouselTransition.SLIDE,
+        tagSlugs: List<String>? = null,
     ): Result<Post> =
-        safeApiCall { postsApi.updatePost(id, PostRequest(title, content, status, transition)) }
+        safeApiCall { postsApi.updatePost(id, PostRequest(title, content, status, transition, tagSlugs)) }
 
     /** Metadata preparation must not change publication state, including after a lost response. */
     suspend fun updatePostContent(
-        id: Long, title: String, content: String, transition: CarouselTransition,
-    ): Result<Post> = safeApiCall { postsApi.updatePost(id, PostRequest(title, content, carousel_transition = transition)) }
+        id: Long, title: String, content: String, transition: CarouselTransition, tagSlugs: List<String>? = null,
+    ): Result<Post> = safeApiCall { postsApi.updatePost(id, PostRequest(title, content, carousel_transition = transition, tag_slugs = tagSlugs)) }
 
     suspend fun deletePost(id: Long): Result<Unit> =
         safeApiCall { postsApi.deletePost(id) }

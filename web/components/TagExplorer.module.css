@@ -1,0 +1,15 @@
+.panel { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); margin-block: var(--space-6); background: var(--panel); border: var(--border-solid); box-shadow: var(--shadow-hard-offset-sm); }
+.panel h2 { font-size: 1.5rem; }
+.options { border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.panel button { min-height: 48px; padding: var(--space-2) var(--space-3); border: var(--border-solid); background: var(--surface-soft); color: var(--ink-primary); font: inherit; font-weight: 700; cursor: pointer; }
+.panel button[aria-pressed="true"] { background: var(--hero-surface); color: var(--hero-ink); }
+.panel button:disabled { opacity: .65; cursor: default; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.actions button:first-child { background: var(--action); color: var(--action-on); }
+.status { min-height: 1.5em; color: var(--ink-secondary); font-size: .875rem; }
+.hashtags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.hashtags a { position: relative; z-index: 1; display: inline-flex; align-items: center; min-height: 44px; color: var(--action); font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.hashtags a:hover { text-decoration: underline; }
+.empty { padding: var(--space-5); border: var(--border-solid); background: var(--panel); }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 360px) { .panel { padding: var(--space-4); } }

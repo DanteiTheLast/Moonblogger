@@ -54,11 +54,15 @@ enum class CarouselTransition {
 }
 
 @Serializable
+data class Tag(val slug: String, val name: String)
+
+@Serializable
 data class PostRequest(
     val title: String,
     val content: String,
     val status: PostStatus? = null,
     val carousel_transition: CarouselTransition = CarouselTransition.SLIDE,
+    val tag_slugs: List<String>? = null,
 )
 
 @Serializable
@@ -90,6 +94,7 @@ data class Post(
     val published_at: String? = null,
     val carousel_transition: CarouselTransition = CarouselTransition.SLIDE,
     val media: List<PostMedia> = emptyList(),
+    val tags: List<Tag> = emptyList(),
 )
 
 /** Lista paginada de DRF: {count, next, previous, results}. */

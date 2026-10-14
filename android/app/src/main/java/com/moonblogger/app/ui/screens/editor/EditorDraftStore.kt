@@ -24,6 +24,9 @@ data class EditorDraft(
     val deletedMediaIds: Set<String>,
     val isMediaDirty: Boolean,
     val omittedLocalPhotos: Boolean,
+    val schemaVersion: Int = 2,
+    val tags: List<com.moonblogger.app.data.model.Tag> = emptyList(),
+    val tagsDirty: Boolean = false,
 )
 
 @Serializable

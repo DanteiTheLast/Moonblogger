@@ -45,6 +45,11 @@ data class PostEditorUiState(
     val localCopyAvailable: Boolean = false,
     val hasChanges: Boolean = false,
     val needsPhotoReview: Boolean = false,
+    val tags: List<com.moonblogger.app.data.model.Tag> = emptyList(),
+    val tagCatalog: List<com.moonblogger.app.data.model.Tag> = emptyList(),
+    val tagsDirty: Boolean = false,
+    val tagsLoading: Boolean = false,
+    val tagsError: String? = null,
     val title: String = "",
     val content: String = "",
     val status: PostStatus = PostStatus.DRAFT,
@@ -88,7 +93,7 @@ class PostEditorViewModel(
                 initialLoadStarted = true
                 _uiState.value = PostEditorUiState(
                     isEdit = postId != null, title = draft.title, content = draft.content,
-                    status = draft.status, transition = draft.transition,
+                    status = draft.status, transition = draft.transition, tags = draft.tags, tagsDirty = draft.tagsDirty,
                     media = draft.media.map { EditorMedia(it.key, it.mediaId, kind = it.kind,
                         mimeType = it.mimeType, altText = it.altText, caption = it.caption, isCover = it.isCover) }.ensureCover(),
                     deletedMediaIds = draft.deletedMediaIds, isMediaDirty = draft.isMediaDirty,
@@ -120,7 +125,7 @@ class PostEditorViewModel(
             store.save(EditorDraft(workingPostId, originalStatus, state.title, state.content, state.status,
                 state.transition, state.media.mapNotNull { item -> item.mediaId?.let {
                     DraftMedia(item.key, it, item.kind, item.mimeType, item.altText, item.caption, item.isCover)
-                } }, state.deletedMediaIds, state.isMediaDirty, state.needsPhotoReview || state.media.any { it.mediaId == null && it.isLocal }))
+                } }, state.deletedMediaIds, state.isMediaDirty, state.needsPhotoReview || state.media.any { it.mediaId == null && it.isLocal }, tags = state.tags, tagsDirty = state.tagsDirty))
             _uiState.update { it.copy(localCopyAvailable = true,
                 localNotice = if (it.localNotice?.startsWith("No se pudo guardar") == true) null else it.localNotice) }
         } catch (_: Exception) {
@@ -176,6 +181,7 @@ class PostEditorViewModel(
                             isLoading = false,
                             title = post.title.take(MAX_TITLE_LENGTH),
                             content = post.content,
+                            tags = post.tags, tagsDirty = false,
                             status = post.status,
                             transition = post.carousel_transition,
                             media = media,
@@ -186,6 +192,28 @@ class PostEditorViewModel(
                     _uiState.update { it.copy(isLoading = false, loadError = ApiErrors.userMessage(error)) }
                 }
         }
+    }
+
+    fun loadTags() {
+        if (_uiState.value.tagsLoading || _uiState.value.tagCatalog.isNotEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(tagsLoading = true, tagsError = null) }
+            repository.listTags().onSuccess { catalog ->
+                _uiState.update { it.copy(tagCatalog = catalog, tagsLoading = false) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(tagsLoading = false, tagsError = ApiErrors.userMessage(error)) }
+            }
+        }
+    }
+
+    fun toggleTag(slug: String) {
+        val state = _uiState.value
+        if (state.tagsLoading || state.tagsError != null) return
+        val selected = state.tags.any { it.slug == slug }
+        val tag = (state.tagCatalog + state.tags).firstOrNull { it.slug == slug } ?: return
+        if (!selected && state.tags.size >= 5) return
+        change { it.copy(tags = if (selected) it.tags.filterNot { item -> item.slug == slug } else it.tags + tag,
+            tagsDirty = true, error = null) }
     }
 
     fun onTitleChange(value: String) = change { it.copy(title = value.take(MAX_TITLE_LENGTH), error = null) }
@@ -306,9 +334,9 @@ class PostEditorViewModel(
             _uiState.update { it.copy(isSaving = true, error = null, uploadMessage = null) }
             if (!snapshot.isMediaDirty) {
                 val result = if (workingPostId == null) {
-                    repository.createPost(title, content, snapshot.status, snapshot.transition)
+                    repository.createPost(title, content, snapshot.status, snapshot.transition, snapshot.tags.takeIf { snapshot.tagsDirty }?.map { it.slug })
                 } else {
-                    repository.updatePost(requireNotNull(workingPostId), title, content, snapshot.status, snapshot.transition)
+                    repository.updatePost(requireNotNull(workingPostId), title, content, snapshot.status, snapshot.transition, snapshot.tags.takeIf { snapshot.tagsDirty }?.map { it.slug })
                 }
                 result.onSuccess { workingPostId = it.id; persist() }
                 finish(result.exceptionOrNull())
@@ -317,9 +345,9 @@ class PostEditorViewModel(
 
             // New uploads stay hidden until layout; keep the existing publication status.
             val draft = if (workingPostId == null) {
-                repository.createPost(title, content, PostStatus.DRAFT, snapshot.transition)
+                repository.createPost(title, content, PostStatus.DRAFT, snapshot.transition, snapshot.tags.takeIf { snapshot.tagsDirty }?.map { it.slug })
             } else {
-                repository.updatePostContent(requireNotNull(workingPostId), title, content, snapshot.transition)
+                repository.updatePostContent(requireNotNull(workingPostId), title, content, snapshot.transition, snapshot.tags.takeIf { snapshot.tagsDirty }?.map { it.slug })
             }
             val post = draft.getOrElse { error ->
                 finish(error)
@@ -398,7 +426,7 @@ class PostEditorViewModel(
                 return@launch
             }
             _uiState.update { it.copy(uploadMessage = "Actualizando la publicación…") }
-            finish(repository.updatePost(post.id, title, content, snapshot.status, snapshot.transition).exceptionOrNull(), partial = true)
+            finish(repository.updatePost(post.id, title, content, snapshot.status, snapshot.transition, snapshot.tags.takeIf { snapshot.tagsDirty }?.map { it.slug }).exceptionOrNull(), partial = true)
         }
     }
 

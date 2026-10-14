@@ -1,22 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api";
-import { getPublishedPostsPage } from "@/lib/api";
+import TagExplorer from "./TagExplorer";
+import { getPublishedPostsPage, getPublicTags } from "@/lib/api";
 import PostCard from "@/components/PostCard";
 import BrandArtwork from "@/components/BrandArtwork";
 import RouteState from "@/components/RouteState";
 import styles from "@/app/page.module.css";
 
-export default async function PostFeed({ page }: { page: number }) {
+export default async function PostFeed({ page, tags = [], home = false }: { page: number; tags?: string[]; home?: boolean }) {
   let data;
   try {
-    data = await getPublishedPostsPage(page);
+    data = await (home ? getPublishedPostsPage(page, tags) : getPublishedPostsPage(page));
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
+  const catalog = home ? await getPublicTags() : [];
   const posts = data.results;
-  const HeroHeading = posts.length === 0 ? "p" : "h1";
+  const HeroHeading = posts.length === 0 && !home ? "p" : "h1";
 
   return (
     <>
@@ -30,7 +32,7 @@ export default async function PostFeed({ page }: { page: number }) {
         <BrandArtwork className={styles.heroScene} />
       </section>
 
-      {posts.length === 0 ? (
+      {home ? <TagExplorer catalog={catalog} initialData={data} initialTags={tags} initialPage={page} /> : posts.length === 0 ? (
         <RouteState
           title="Todavía no hay publicaciones"
           description="Vuelve pronto para encontrar novedades."

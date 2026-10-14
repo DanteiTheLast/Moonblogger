@@ -244,3 +244,12 @@ describe("presupuesto de arranque en frío", () => {
     expect(timeout.mock.calls.map(call => call[0])).toEqual([65_000, 9_000]);
   });
 });
+
+describe("tag-filtered public API", () => {
+  it("sends repeated OR parameters before pagination without duplicate slugs", async () => {
+    const fetchMock = mockFetch(200, { count: 0, next: null, previous: null, results: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    await getPublishedPostsPage(2, ["viajes", "dan", "dan"]);
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/api/v1/public/posts/?tag=dan&tag=viajes&page=2", expect.anything());
+  });
+});

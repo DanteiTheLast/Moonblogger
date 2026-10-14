@@ -23,7 +23,10 @@ export interface PostMedia {
   poster_url: string | null;
 }
 
+export interface Tag { slug: string; name: string; }
+
 export interface PostBase {
+  tags?: Tag[];
   id: number;
   slug: string;
   title: string;

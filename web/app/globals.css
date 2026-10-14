@@ -19,8 +19,32 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 16px 16px;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Unas estrellas en los márgenes dejan la zona de lectura tranquila. */
+body::before,
+body::after {
+  content: "";
+  position: absolute;
+  top: 7rem;
+  bottom: 0;
+  width: min(5rem, max(1rem, calc((100% - var(--container-max)) / 2 - 1rem)));
+  background: url("/brand/lunar-stars.svg") center top / 5rem 48rem repeat-y;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before { left: 0; }
+body::after { right: 0; transform: scaleX(-1); background-position-y: 15rem; }
+
+@media (max-width: 48rem) {
+  body::before,
+  body::after {
+    background-size: 5rem 72rem;
+    opacity: 0.5;
+  }
 }
 
 ::selection { background: var(--selection); color: var(--selection-text); }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError, getPublishedPostBySlug, getPublishedPosts } from "@/lib/api";
+import Hashtags from "@/components/Hashtags";
 import MediaCarousel from "@/components/MediaCarousel";
 import { formatDate } from "@/lib/format";
 import styles from "./page.module.css";
@@ -70,10 +71,11 @@ export default async function PostPage({ params }: PostPageProps) {
           </svg>
           Volver al listado
         </Link>
+        <h1 className={styles.title}>{post.title}</h1>
         <time className={styles.date} dateTime={date}>
           {formatDate(date)}
         </time>
-        <h1 className={styles.title}>{post.title}</h1>
+        <Hashtags tags={post.tags} />
       </header>
       {post.media.length > 0 ? (
         <MediaCarousel

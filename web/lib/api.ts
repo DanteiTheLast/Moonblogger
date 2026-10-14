@@ -1,4 +1,4 @@
-import type { Post, PostListItem, PostListResponse } from "./types";
+import type { Post, PostListItem, PostListResponse, Tag } from "./types";
 
 import { unstable_cache } from "next/cache";
 
@@ -95,9 +95,12 @@ async function request<T>(path: string): Promise<T> {
   return await cachedRequest(getApiBaseUrl(), path) as T;
 }
 
-export async function getPublishedPostsPage(page = 1): Promise<PostListResponse> {
+export async function getPublishedPostsPage(page = 1, tags: string[] = []): Promise<PostListResponse> {
   if (!Number.isSafeInteger(page) || page < 1) throw new ApiError("Página inválida.", 400);
-  return request<PostListResponse>(`/public/posts/${page === 1 ? "" : `?page=${page}`}`);
+  const query = new URLSearchParams();
+  [...new Set(tags)].sort().forEach((slug) => query.append("tag", slug));
+  if (page > 1) query.set("page", String(page));
+  return request<PostListResponse>(`/public/posts/${query.size ? `?${query}` : ""}`);
 }
 
 /** Compatibilidad con consumidores de la primera página. */
@@ -127,4 +130,8 @@ export const getAllPublishedPosts = unstable_cache(
 /** Detalle público por slug. 404 si es borrador o no existe. */
 export async function getPublishedPostBySlug(slug: string): Promise<Post> {
   return request<Post>(`/public/posts/${encodeURIComponent(slug)}/`);
+}
+
+export async function getPublicTags(): Promise<Tag[]> {
+  return request<Tag[]>("/public/tags/");
 }

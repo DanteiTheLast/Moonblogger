@@ -5,7 +5,8 @@
   gap: var(--space-5);
   padding: var(--space-5);
   border: var(--border-solid);
-  background: var(--panel);
+  border-left: calc(var(--pixel-unit) * 2) solid var(--action);
+  background: var(--hero-surface);
   box-shadow: var(--shadow-hard-offset-md);
 }
 
@@ -19,12 +20,12 @@
   font-weight: 600;
   line-height: 1.2;
   font-size: clamp(2rem, 4.5vw, 3rem);
-  color: var(--ink-primary);
+  color: var(--hero-ink);
 }
 
 .heroText {
   max-width: 32rem;
-  color: var(--color-text-muted);
+  color: var(--hero-muted);
   font-size: 1.125rem;
   margin-top: var(--space-2);
 }
@@ -32,20 +33,32 @@
 .heroScene {
   flex: 0 1 auto;
   width: 100%;
-  max-width: 22rem;
+  max-width: 11rem;
   align-self: center;
-  border: var(--border-solid);
+  border: var(--border-width) solid var(--hero-frame);
   background: var(--surface-soft);
   box-shadow: var(--shadow-hard-offset-sm);
 }
 
 .feed {
-  margin-top: var(--space-7);
+  margin-top: var(--space-6);
 }
 
 .feedTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
   font-size: 1.75rem;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.feedTitle::after {
+  content: "";
+  flex: 1;
+  min-width: 1rem;
+  height: var(--pixel-unit);
+  background: var(--border);
+  box-shadow: 0 var(--pixel-unit) 0 var(--shadow-color-soft);
 }
 
 .list {
@@ -67,9 +80,10 @@
   }
 
   .heroScene {
-    flex: 0 1 40%;
+    flex: 0 1 32%;
     min-width: 0;
-    width: 40%;
+    width: 32%;
+    max-width: 12rem;
   }
 
   .list {

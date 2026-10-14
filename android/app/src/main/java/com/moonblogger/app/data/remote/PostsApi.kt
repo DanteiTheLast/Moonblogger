@@ -25,6 +25,9 @@ import retrofit2.http.PUT
  */
 interface PostsApi {
 
+    @GET("api/v1/tags/")
+    suspend fun listTags(): List<com.moonblogger.app.data.model.Tag>
+
     @GET("api/v1/posts/")
     suspend fun listPosts(
         @Query("status") status: String? = null,

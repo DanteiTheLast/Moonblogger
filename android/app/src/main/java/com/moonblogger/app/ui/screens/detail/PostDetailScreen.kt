@@ -1,5 +1,6 @@
 package com.moonblogger.app.ui.screens.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
+import com.moonblogger.app.ui.components.PixelAlertDialog as AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -138,7 +139,9 @@ fun PostDetailScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(innerPadding)
-                        .padding(horizontal = 20.dp, vertical = 24.dp),
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -148,14 +151,8 @@ fun PostDetailScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = stringResource(
-                            R.string.detail_updated,
-                            DateFormatters.formatDateTime(post.updated_at),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    com.moonblogger.app.ui.components.DateBadge(DateFormatters.formatDateTime(post.updated_at))
+                    com.moonblogger.app.ui.components.Hashtags(post.tags)
                     PostMediaViewer(post.media, state.mediaReadUrls, state.mediaError, viewModel::retryMediaReadUrls)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(Modifier.height(4.dp))

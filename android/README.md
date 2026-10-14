@@ -95,7 +95,7 @@ El keystore (por defecto `android/moonblogger-release.jks`) es la
 - **D7 / tokens:** `EncryptedSharedPreferences` está deprecada upstream
   (security-crypto 1.1.0). Funciona, pero la migración (SharedPreferences +
   Android Keystore) está pendiente.
-- **Tipografía:** la web usa Nunito (texto) y Baloo 2 (display); en Android se
+- **Tipografía:** la web usa Nunito (texto) y Pixelify Sans (display); en Android se
   usa la tipografía M3 por defecto. Integración de fuentes pendiente (cambio
   aditivo, no bloquea funcionalidad).
 - **Paginación:** la lista usa `page` y muestra «Cargar más publicaciones»
@@ -159,3 +159,13 @@ El launcher usa el PNG proporcionado, con margen dentro del icono adaptativo par
 Koto reproduce el WebP original en Android 9/API 28 o superior mediante `coil-gif` 3.3.0 y `AnimatedImageDecoder`. Android 8/API 26–27 usa seis fotogramas extraídos sin alterar sus píxeles ni sus intervalos (ciclo de 2,3 segundos), con el temporizador suspendido cuando la pantalla deja de estar visible. Al desactivar las animaciones del sistema se muestra el PNG estático, también si la preferencia cambia con la aplicación abierta.
 
 El splash del sistema en Android 12+ muestra el PNG: esa ventana admite animaciones vectoriales, no WebP animado. La pantalla de carga Compose posterior sí puede reproducir el WebP mientras se inicializa la sesión. Las pruebas de recursos comprueban decodificación en API 26 y 35 y que el decodificador nativo reconoce el WebP como `AnimatedImageDrawable`; la apariencia y fluidez finales deben comprobarse en dispositivo.
+
+
+## Etiquetas y estética compartida (0.1.8)
+
+- Catálogo desde `GET /api/v1/tags/`; lecturas `tags[{slug,name}]`, escrituras opcionales `tag_slugs`. Omitir conserva asociaciones; lista vacía elimina. La selección es opcional y admite cinco etiquetas.
+- Etiquetas debajo del contenido, antes del estado y guardado; visibles cerca de la fecha en listado y detalle. Fallo de catálogo no elimina asociaciones existentes ni bloquea guardar texto. Borradores locales v2 conservan etiquetas y estado de modificación; archivos anteriores reciben valores por defecto compatibles.
+- Apariencia Sistema/Claro/Oscuro persistente y local al dispositivo. Paleta azul de amanecer/azul noche en claro, ciruela en oscuro, superficies de lectura sin textura, esquinas cuadradas y sombras desplazadas sin desenfoque.
+- Pixelify Sans (títulos) y Nunito (lectura) están empaquetadas localmente: Google Fonts, `https://github.com/google/fonts/tree/main/ofl/pixelifysans` y `https://github.com/google/fonts/tree/main/ofl/nunito`. Licencias SIL OFL incluidas en `res/raw/pixelify_sans_license.txt` y `nunito_license.txt`; no se descargan en ejecución.
+- El listado carga la portada privada sólo para tarjetas compuestas, conserva los enlaces firmados en memoria y los vuelve a solicitar al refrescar. Nunca se guardan en borradores ni preferencias.
+- Verificación física de TalkBack, teclado, letra ampliada y ambos temas requiere dispositivo o emulador; las pruebas JVM no sustituyen esa revisión.

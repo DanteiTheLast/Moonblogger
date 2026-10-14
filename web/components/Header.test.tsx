@@ -14,10 +14,10 @@ describe("site chrome", () => {
     expect(markup).toContain('aria-label="Cambiar tema"');
   });
 
-  it("keeps the privacy link and legal text in the footer", () => {
+  it("keeps the brand and privacy link in the footer", () => {
     const markup = renderToStaticMarkup(<Footer />);
 
-    expect(markup).toContain("MoonBlogger: el blog de Moon.");
+    expect(markup).toContain("Moonblogger");
     expect(markup).toContain('href="/privacy"');
     expect(markup).toContain('aria-hidden="true"');
   });

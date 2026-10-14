@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { POST, canonicalIp } from "./route";
+import { POST } from "./route";
+import { canonicalIp } from "@/lib/canonicalIp";
 
 const SECRET = "visit-test-secret";
 

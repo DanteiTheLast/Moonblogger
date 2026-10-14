@@ -246,3 +246,26 @@ animación no usa el optimizador de fotos; las preferencias de movimiento
 seleccionan una versión estática. Android26–27 conserva los seis fotogramas y
 sus tiempos mediante fallback. El splash nativo de Android31 permanece estático
 con el nuevo icono y se continúa con Compose sin retrasar sesión. Ver branding.md.
+
+## D17 — Etiquetas y sistema visual compartido (13/10/2026)
+
+Se conserva Android/web → Django → PostgreSQL. El catálogo de etiquetas reside
+en Django y Post tiene una relación muchos a muchos: ninguna etiqueta se
+extrae del texto ni se asigna automáticamente a publicaciones existentes. Dan
+es una etiqueta ordinaria combinable. Consultas públicas usan OR antes de
+paginar y resultados únicos; borradores y sus etiquetas no se exponen.
+
+La principal web aloja el selector; las combinaciones se conservan en query
+string, sin otra pantalla de búsqueda. Hashtags son enlaces separados del
+enlace principal de cada tarjeta. Escrituras antiguas que omiten etiquetas
+conservan asociaciones; las nuevas envían lista vacía para eliminarlas.
+
+Azul de amanecer/azul noche y ciruela oscuro comparten funciones semánticas
+con Android, junto con Pixelify Sans y Nunito locales. La app conserva
+navegación móvil y objetivos táctiles. Sin colores dinámicos del dispositivo.
+Las preferencias de tema son independientes por cliente. No se añade un
+servicio de búsqueda ni una herramienta generadora de tokens.
+
+Las migraciones requieren revisar ACL de tablas y secuencias nuevas antes de
+publicar backend. La nueva APK requiere el contrato desplegado para gestionar
+etiquetas; compilarla localmente no demuestra que producción tenga la función.

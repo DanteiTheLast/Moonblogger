@@ -28,3 +28,12 @@ describe("PostCard", () => {
     expect((markup.match(/href="\/posts\/sin-portada"/g) ?? [])).toHaveLength(1);
   });
 });
+
+it("keeps hashtag links outside the main post link", () => {
+  const markup = renderToStaticMarkup(<PostCard post={{ ...postWithoutCover, tags: [{ slug: "dan", name: "Dan" }] }} />);
+  expect(markup).toContain('href="/?tag=dan"');
+  expect(markup).toContain("#Dan");
+  const mainStart = markup.indexOf('href="/posts/sin-portada"');
+  const mainEnd = markup.indexOf("</a>", mainStart);
+  expect(markup.indexOf('href="/?tag=dan"')).toBeGreaterThan(mainEnd);
+});

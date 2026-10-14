@@ -1,5 +1,22 @@
 :root {
   /* Primitivos: la única capa que contiene valores de color concretos. */
+  --dawn-cover: #233b59;
+  --dawn-canvas: #e4eaf2;
+  --dawn-mist: #dce3ee;
+  --ivory-canvas: #f5efe6;
+  --day-ink: #46334f;
+  --dusty-rose: #a04c72;
+  --dawn-shadow-soft: #d2d8e8;
+  --dawn-shadow-strong: #bbc4de;
+  --dusty-pink-soft: #e6d6dd;
+  --dusty-pink-strong: #d9b6c5;
+  --hero-cream: #fff5e9;
+  --hero-cream-muted: #e0cddd;
+  --lavender-canvas: #eee8f5;
+  --ivory: #fff9f1;
+  --diary-lavender: #e3d9ee;
+  --night-diary: #30233b;
+  --night-paper: #3b2b43;
   --pink-50: #fff6fb;
   --pink-100: #fff0f6;
   --pink-200: #ffe1ee;
@@ -31,12 +48,12 @@
 
   /* Semánticos: tema claro por defecto, incluso sin JavaScript. */
   color-scheme: light;
-  --canvas: var(--pink-50);
-  --panel: var(--white);
-  --surface-soft: var(--pink-100);
-  --ink-primary: var(--plum-900);
+  --canvas: var(--dawn-canvas);
+  --panel: var(--ivory);
+  --surface-soft: var(--dawn-mist);
+  --ink-primary: var(--day-ink);
   --ink-secondary: var(--plum-700);
-  --action: var(--pink-700);
+  --action: var(--dusty-rose);
   --action-hover: var(--pink-800);
   --action-on: var(--white);
   --border: var(--pink-300);
@@ -45,8 +62,13 @@
   --danger-on: var(--white);
   --selection: var(--pink-300);
   --selection-text: var(--ink-primary);
-  --shadow-color-soft: var(--lavender-100);
-  --shadow-color-strong: var(--pink-300);
+  --shadow-color-soft: var(--dawn-shadow-soft);
+  --shadow-color-strong: var(--dawn-shadow-strong);
+
+  --hero-surface: var(--dawn-cover);
+  --hero-ink: var(--hero-cream);
+  --hero-muted: var(--hero-cream-muted);
+  --hero-frame: var(--hero-cream-muted);
 
   /* Tipografía (variables inyectadas por next/font en <html>). */
   --font-sans: var(--font-nunito), "Nunito", system-ui, -apple-system, sans-serif;
@@ -105,9 +127,13 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+  --hero-surface: var(--surface-soft);
+  --hero-ink: var(--ink-primary);
+  --hero-muted: var(--ink-secondary);
+  --hero-frame: var(--ink-primary);
   --canvas: var(--night-950);
-  --panel: var(--night-900);
-  --surface-soft: var(--night-800);
+  --panel: var(--night-paper);
+  --surface-soft: var(--night-diary);
   --ink-primary: var(--night-200);
   --ink-secondary: var(--night-300);
   --action: var(--night-pink);

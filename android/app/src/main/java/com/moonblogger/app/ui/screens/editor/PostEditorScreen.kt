@@ -20,15 +20,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.moonblogger.app.ui.components.PixelAlertDialog as AlertDialog
+import com.moonblogger.app.ui.components.PixelButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedButton
+import com.moonblogger.app.ui.components.PixelOutlinedButton as OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -102,6 +102,7 @@ fun PostEditorScreen(
 
     LaunchedEffect(Unit) {
         viewModel.start()
+        viewModel.loadTags()
     }
 
     LaunchedEffect(state.isSaved) {
@@ -180,11 +181,14 @@ fun PostEditorScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
 
+                    com.moonblogger.app.ui.components.TagSelector(state.tags, state.tagCatalog, state.tagsLoading, state.tagsError,
+                        !state.isSaving && !state.isLoading, viewModel::toggleTag, viewModel::loadTags)
+
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
                             selected = state.status == PostStatus.DRAFT,
                             onClick = { viewModel.onStatusChange(PostStatus.DRAFT) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            shape = MaterialTheme.shapes.small,
                             enabled = !state.isSaving,
                         ) {
                             Text(stringResource(R.string.editor_status_draft))
@@ -192,7 +196,7 @@ fun PostEditorScreen(
                         SegmentedButton(
                             selected = state.status == PostStatus.PUBLISHED,
                             onClick = { viewModel.onStatusChange(PostStatus.PUBLISHED) },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            shape = MaterialTheme.shapes.small,
                             enabled = !state.isSaving,
                         ) {
                             Text(stringResource(R.string.editor_status_published))
@@ -248,10 +252,7 @@ fun PostEditorScreen(
                                 SegmentedButton(
                                     selected = state.transition == transition,
                                     onClick = { viewModel.onTransitionChange(transition) },
-                                    shape = SegmentedButtonDefaults.itemShape(
-                                        index = index,
-                                        count = CarouselTransition.entries.size,
-                                    ),
+                                    shape = MaterialTheme.shapes.small,
                                     enabled = !state.isSaving,
                                 ) { Text(transition.label()) }
                             }

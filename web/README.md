@@ -118,3 +118,11 @@ compatible anunciado. La sugerencia automática rebaja Next ESLint a 14;
 no se aplica. Vitest 4.1.11 corrige el aviso de su mocker. El entorno npm 10.9.8
 falló al resolver ese parche (`edgesOut`); el lockfile se resolvió con npm 11
 usado temporalmente, sin cambiar la instalación global de npm.
+
+### Etiquetas públicas
+
+La principal conserva filtros OR en parámetros repetidos (`/?tag=dan&tag=viajes&page=2`), ordenados y sin duplicados. El catálogo se obtiene de `GET /public/tags/` (sólo etiquetas usadas en publicaciones públicas); el total y la paginación provienen de Django, sin filtrar una página ya descargada. Las combinaciones filtradas llevan `noindex, follow` y canonical de la principal.
+
+La selección es pendiente hasta pulsar «Aplicar filtros». Las consultas posteriores pasan por `/api/public-feed` y mantienen el listado confirmado durante carga o error; el botón «Reintentar» conserva el filtro solicitado. Atrás/Adelante restaura las selecciones de la URL. Parámetros malformados muestran un error y «Ver todas»; no se convierten silenciosamente en un listado completo. El catálogo requiere el backend actualizado: no existe un catálogo ficticio de respaldo para producción.
+
+Hashtags de tarjetas y detalle enlazan a la principal. La tarjeta utiliza un único enlace de lectura extendido; los hashtags son enlaces hermanos independientes, accesibles con teclado, sin anidación. Los colores y geometría emplean los mismos tokens semánticos de la versión azul de amanecer/ciruela aprobada.

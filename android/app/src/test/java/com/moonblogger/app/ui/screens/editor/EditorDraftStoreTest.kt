@@ -7,6 +7,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EditorDraftStoreTest {
+    @Test fun `legacy draft without tag fields recovers compatible defaults`() {
+        val legacy = """{"workingPostId":null,"originalStatus":"draft","title":"Old","content":"Text","status":"draft","transition":"slide","media":[],"deletedMediaIds":[],"isMediaDirty":false,"omittedLocalPhotos":false}"""
+        val draft = kotlinx.serialization.json.Json.decodeFromString<EditorDraft>(legacy)
+        assertEquals("Old", draft.title)
+        assertTrue(draft.tags.isEmpty())
+        assertFalse(draft.tagsDirty)
+    }
     @Test fun `draft survives store recreation and stays isolated by account origin and post`() {
         val root = Files.createTempDirectory("editor-draft-test").toFile()
         try {

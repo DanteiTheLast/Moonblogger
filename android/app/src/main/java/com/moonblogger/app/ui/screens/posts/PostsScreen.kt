@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.Button
+import com.moonblogger.app.ui.components.PixelButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.moonblogger.app.R
+import com.moonblogger.app.ui.components.pixelShadow
 import com.moonblogger.app.ui.components.PostCard
 import com.moonblogger.app.ui.components.DecorativeMotif
 
@@ -73,6 +75,7 @@ fun PostsScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 actions = {
+                    com.moonblogger.app.ui.components.ThemePicker()
                     IconButton(onClick = onLogout) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -85,6 +88,8 @@ fun PostsScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNewPost,
+                modifier = Modifier.pixelShadow(com.moonblogger.app.ui.theme.LocalMoonAccents.current.shadow),
+                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 0.dp, focusedElevation = 0.dp, hoveredElevation = 0.dp),
                 shape = MaterialTheme.shapes.medium,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -144,7 +149,12 @@ fun PostsScreen(
                                 }
                             }
                             items(state.posts, key = { it.id }) { post ->
+                                LaunchedEffect(post.id, post.updated_at, state.isRefreshing) { viewModel.loadCover(post) }
                                 PostCard(
+                                    coverUrl = state.coverUrls[post.id],
+                                    coverError = post.id in state.coverErrors,
+                                    onCoverFailed = { viewModel.coverFailed(post) },
+                                    onRetryCover = { viewModel.loadCover(post, retry = true) },
                                     post = post,
                                     onClick = { onPostClick(post.id) },
                                 )

@@ -1,5 +1,6 @@
 package com.moonblogger.app.ui.components
 
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,14 +29,30 @@ fun PostCard(
     post: Post,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    coverUrl: String? = null,
+    coverError: Boolean = false,
+    onCoverFailed: () -> Unit = {},
+    onRetryCover: () -> Unit = {},
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large),
+        modifier = modifier.fillMaxWidth().pixelShadow(com.moonblogger.app.ui.theme.LocalMoonAccents.current.shadow).border(2.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
+        if (post.media.any { it.is_cover && it.state == "ready" && it.kind == "image" }) {
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                when {
+                    coverError -> androidx.compose.material3.TextButton(onClick = onRetryCover) { Text("Reintentar portada") }
+                    coverUrl != null -> coil3.compose.AsyncImage(model = coverUrl,
+                        contentDescription = post.media.firstOrNull { it.is_cover }?.alt_text?.takeIf { it.isNotBlank() },
+                        onError = { onCoverFailed() }, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                    else -> Text("Cargando portada…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -59,6 +76,7 @@ fun PostCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Hashtags(post.tags)
             Text(
                 text = post.content.take(EXCERPT_LENGTH) +
                     if (post.content.length > EXCERPT_LENGTH) "…" else "",

@@ -81,3 +81,10 @@ validación, contratos ajustados, límites y estado de producción.
 Preparación de fotos antes de subir en Android y entrega adaptativa en Next.js.
 Ver [política, comprobaciones y límites](image-optimization.md). El APK anterior
 no cambia por desplegar la web; se requiere actualizar la aplicación Android.
+
+## Etiquetas y coherencia visual
+
+Catálogo central y clasificación múltiple en editor Android; filtros OR y
+hashtags en la principal/detalle web. Diseño claro azul de amanecer y oscuro
+ciruela compartido con Android. Ver decisiones D17 y contrato de API.
+La implementación local y su despliegue deben verificarse por separado.
