@@ -269,3 +269,22 @@ servicio de búsqueda ni una herramienta generadora de tokens.
 Las migraciones requieren revisar ACL de tablas y secuencias nuevas antes de
 publicar backend. La nueva APK requiere el contrato desplegado para gestionar
 etiquetas; compilarla localmente no demuestra que producción tenga la función.
+
+## D18 — Editor web privado (15/10/2026)
+
+La misma API editorial de Android se consume desde /editor en Next.js.
+Un BFF /api/editor conserva access/refresh JWT en cookies HttpOnly y aplica
+CSRF, allowlist de rutas y respuestas privadas sin caché. Los tokens no
+se devuelven en JSON al navegador. Cada petición lleva el identificador de
+la cuenta que abrió el formulario para evitar escrituras cruzadas al
+cambiar sesión en otra pestaña. Web Locks serializa peticiones entre pestañas
+cuando está disponible; existe fallback por pestaña y coalescing por proceso.
+
+Se conservan borradores de texto y checkpoints locales por cuenta/API/post,
+sin archivos, credenciales ni URLs firmadas. Las fotos se preparan antes de
+subir y van directamente al bucket privado con el mismo protocolo de intents
+y complete. Se reconcilian confirmaciones perdidas, sin repetir ciegamente
+creación ni PUT de objetos. No se cambia el contrato Django ni la base.
+
+La publicación permanece como texto plano y se usan los tokens visuales web
+y controles equivalentes al editor Android. Ver web-editor.md.

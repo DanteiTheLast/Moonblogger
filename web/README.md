@@ -1,15 +1,18 @@
 # MoonBlogger — Frontend web
 
-Frontend público de solo lectura de MoonBlogger: muestra las publicaciones de
-Moon que el backend ha marcado como `published`.
+Frontend de MoonBlogger con blog público de solo lectura y editor privado para
+Moon. El blog muestra únicamente las publicaciones que Django ha marcado como
+`published`; el editor permite escribir y editar con la misma cuenta de Android.
 
 - **Stack:** Next.js + TypeScript con App Router.
 - **Rendering:** ISR con revalidación temporal (1 h) y bajo demanda mediante
-  webhook. No hay fetching en el cliente en v1 (no se usan variables
-  `NEXT_PUBLIC_`).
+  webhook para el contenido público. Los filtros públicos y el editor consultan
+  rutas del mismo origen desde el navegador; no se usan variables `NEXT_PUBLIC_`
+  para credenciales ni configuración privada.
 - **Estilos:** CSS Modules + `app/tokens.css` (tokens de diseño pastel).
-- **API:** se consume la API pública de Django (`/api/v1/public/posts/`), solo
-  lectura. Ver `docs/api.md` en la raíz del repositorio.
+- **API:** el blog consume la API pública de Django (`/api/v1/public/posts/`),
+  solo lectura. El editor usa `/api/editor/*` como BFF de Next.js hacia la API
+  privada existente de Django. Ver `docs/api.md` en la raíz del repositorio.
 
 ## Requisitos
 
@@ -19,7 +22,7 @@ Moon que el backend ha marcado como `published`.
   desplegar una pantalla de error como una página válida cacheada. Calienta o
   recupera la API antes de reintentar el despliegue.
 - `API_BASE_URL`: URL base de la API (sin barra final). Se lee como variable de
-  entorno en build; default `http://127.0.0.1:8000/api/v1`. Puedes copiar
+  entorno en el servidor; default `http://127.0.0.1:8000/api/v1`. Puedes copiar
   `.env.example` a `.env.local` para fijarla localmente.
 - `SITE_URL`: URL pública del sitio (sin barra final), usada para
   `sitemap.xml` y `robots.txt`; default `http://localhost:3000`.
@@ -81,11 +84,29 @@ Flujo de publicación:
 3. Vercel invalida el tag `posts`; la siguiente petición sirve contenido fresco.
    Un push a GitHub solo es necesario para cambios de código.
 
+## Editor privado
+
+En `/editor`, Moon puede iniciar sesión con el mismo usuario y contraseña de
+Android, consultar borradores y publicaciones, crear o editar, asignar etiquetas
+y gestionar las fotografías. `/editor/new` abre un escrito nuevo y
+`/editor/[id]` uno existente. El editor conserva el estilo y la organización del
+editor Android; el blog público continúa siendo de solo lectura.
+
+El despliegue reutiliza el `API_BASE_URL` existente, con HTTPS en producción.
+No requiere secretos adicionales ni migraciones. Next.js guarda los JWT en
+cookies esenciales HttpOnly, Secure en producción y SameSite Strict. Las
+mutaciones verifican el origen y una cabecera específica; todas las rutas
+privadas evitan caché e indexación. Las peticiones quedan ligadas a la cuenta
+original de cada pestaña para impedir guardar con otra cuenta tras un cambio
+de sesión. Ver [seguridad, recuperación y despliegue del editor](../docs/web-editor.md).
+
 ## Rutas
 
 - `/` — primera página de publicaciones publicadas.
 - `/archive/[page]` — páginas antiguas con ISR, generadas al visitarlas.
 - `/posts/[slug]` — detalle de una publicación por slug con ISR.
+- `/editor`, `/editor/new`, `/editor/[id]` — listado, creación y edición privados.
+- `/api/editor/*` — sesión y proxy privado acotado hacia Django; nunca entrega JWT al cliente.
 - `/sitemap.xml` — sitemap generado por una metadata route.
 - `/robots.txt` — reglas de rastreo generadas por una metadata route.
 - Los slugs no publicados (borradores o inexistentes) responden **404** desde

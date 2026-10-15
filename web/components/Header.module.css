@@ -44,7 +44,10 @@
   transform: translateX(2px);
 }
 
-@media (max-width: 26rem) {
+.controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; justify-content: flex-end; }
+.writeLink { display: inline-flex; align-items: center; min-height: 48px; padding: .5rem; font-weight: 700; }
+
+@media (max-width: 36rem) {
   .inner {
     grid-template-columns: 44px minmax(0, 1fr);
   }

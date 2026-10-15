@@ -88,3 +88,10 @@ Catálogo central y clasificación múltiple en editor Android; filtros OR y
 hashtags en la principal/detalle web. Diseño claro azul de amanecer y oscuro
 ciruela compartido con Android. Ver decisiones D17 y contrato de API.
 La implementación local y su despliegue deben verificarse por separado.
+
+## Edición desde laptop
+
+La web incorpora /editor para la misma cuenta editorial de Android: listado
+privado, creación/edición, etiquetas, fotos y publicación. La autenticación web
+usa cookies privadas a través de Next; Django mantiene la autorización.
+Ver [editor web](web-editor.md) y decisión D18.

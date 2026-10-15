@@ -9,6 +9,8 @@ describe("site chrome", () => {
 
     expect(markup).toContain('href="/"');
     expect(markup).toContain("MoonBlogger");
+    expect(markup).toContain('href="/editor"');
+    expect(markup).toContain("Escribir");
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).not.toContain("aria-pressed");
     expect(markup).toContain('aria-label="Cambiar tema"');

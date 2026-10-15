@@ -7,6 +7,19 @@ const nextConfig: NextConfig = {
   //
   // Sin `output: 'export'`, Next usa funciones serverless en Vercel
   // para servir ISR y API routes.
+  async headers() {
+    const headers = [
+      { key: "Cache-Control", value: "private, no-store, max-age=0" },
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+      { key: "Referrer-Policy", value: "same-origin" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+    ];
+    return [
+      { source: "/editor/:path*", headers },
+      { source: "/api/editor/:path*", headers },
+    ];
+  },
   images: {
     // Solo archivos del bucket público del proyecto, nunca uploads privados.
     remotePatterns: [{

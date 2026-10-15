@@ -11,7 +11,10 @@ export default function Header() {
         <Link href="/" className={styles.brand}>
           MoonBlogger
         </Link>
-        <ThemeToggle />
+        <div className={styles.controls}>
+          <Link href="/editor" className={styles.writeLink}>Escribir</Link>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
