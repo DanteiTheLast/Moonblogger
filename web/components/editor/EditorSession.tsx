@@ -63,7 +63,7 @@ export default function EditorSession({ children }: {children: ReactNode}) {
     {!session.authenticated && <section className={`${styles.panel} ${styles.login}`} aria-labelledby="login-title">
       <BrandArtwork className={styles.loginArt}/>
       <h1 id="login-title">Tu espacio, Moon</h1>
-      <p>{owner ? "Tu sesión terminó. Vuelve a entrar y continúa con el escrito que tienes abierto." : "Entra con la misma cuenta que usas en Android para crear y editar tus publicaciones."}</p>
+      {owner && <p>Tu sesión terminó. Vuelve a entrar y continúa con el escrito que tienes abierto.</p>}
       <form className={styles.stack} onSubmit={login}>
         <label className={styles.field}>Usuario<input name="username" autoComplete="username" required autoFocus value={username} onChange={event=>setUsername(event.target.value)} disabled={busy}/></label>
         <label className={styles.field}>Contraseña<input name="password" type="password" autoComplete="current-password" required value={password} onChange={event=>setPassword(event.target.value)} disabled={busy}/></label>

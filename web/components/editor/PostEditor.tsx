@@ -130,7 +130,6 @@ export default function PostEditor({postId}:{postId:number|null}) {
   if(loadError)return <section className={styles.panel}><h1>Editar publicación</h1><p role="alert" className={styles.error}>{loadError}</p><div className={styles.row}><button className={styles.secondary} onClick={()=>{setLoading(true);setLoadError("");setReload(value=>value+1);}}>Reintentar carga</button><Link href="/editor">Volver a mis publicaciones</Link></div></section>;
   return <section className={styles.panel} aria-labelledby="editor-title">
     <div className={styles.row}><h1 id="editor-title">{postId||values.workingId?"Editar publicación":"Nueva publicación"}</h1><span className={styles.badge}>{values.originalStatus==="published"?"Publicada":"Borrador"}</span></div>
-    <p className={styles.muted}>El mismo espacio para escribir que llevas en Android, ahora en tu laptop.</p>
     <div className={styles.stack} style={{marginTop:"1.5rem"}}>
       {recovery&&<div className={styles.notice}><p>Hay una copia local de este escrito. Puedes recuperarla o continuar con la versión del servidor.</p><div className={styles.row}><button className={styles.secondary} onClick={restore}>Recuperar copia local</button><button className={styles.smallButton} onClick={discardRecovery}>Descartar copia local</button></div></div>}
       {corrupt&&<div className={styles.notice}><p role="alert">La copia local no se puede leer. Descartarla no cambia lo guardado en el servidor.</p><button className={styles.secondary} onClick={discardRecovery}>Descartar copia ilegible</button></div>}
